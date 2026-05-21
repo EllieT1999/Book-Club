@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = "https://qjxeotvgnatsnaecesjl.supabase.co";
-const SUPABASE_ANON_KEY = "sb_publishable_wGS2qw38rGLjPI1daKMwDg_c2JflEu3";
+const SUPABASE_ANON_KEY = "PASTE_YOUR_ANON_KEY_HERE";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -15,7 +15,7 @@ function avgRating(ratings) {
   return (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1);
 }
 
-function StarRating({ value, onChange, readonly, size = 18 }) {
+function StarRating({ value, onChange, readonly, size = 20 }) {
   return (
     <div className="star-row">
       {[...Array(10)].map((_, i) => (
@@ -106,7 +106,7 @@ export default function BookClub() {
     const suggSummary = suggestions.map(s =>
       `"${s.title}" by ${s.author} (${s.genre}) - suggested by ${s.suggested_by}, ${s.votes?.length || 0} vote(s)${s.reason ? `. Why: ${s.reason}` : ""}`
     ).join("\n");
-    const prompt = `You are a book recommendation expert for a small book club with members: ${MEMBERS.join(", ")}.
+    const prompt = `You are a book recommendation expert for a book club with members: ${MEMBERS.join(", ")}.
 
 BOOKS ALREADY READ (with member ratings out of 10):
 ${bookSummary || "None yet"}
@@ -149,131 +149,174 @@ Respond ONLY with valid JSON (no markdown):
   const sortedBooks = [...books].sort((a, b) => (parseFloat(avgRating(b.ratings)) || 0) - (parseFloat(avgRating(a.ratings)) || 0));
   const sortedSuggs = [...suggestions].sort((a, b) => (b.votes?.length || 0) - (a.votes?.length || 0));
 
-  if (loading) return <div className="splash">Opening the book…</div>;
+  if (loading) return (
+    <div className="splash">
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,700;0,800;0,900;1,700;1,800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap');
+        body{margin:0;background:#fff;font-family:'DM Sans',sans-serif}
+        .splash{display:flex;align-items:center;justify-content:center;height:100vh;font-family:'Barlow Condensed',sans-serif;font-size:48px;font-weight:900;color:#E8000D;letter-spacing:-1px;text-transform:uppercase}
+      `}</style>
+      BOOKED IN
+    </div>
+  );
 
   return (
     <div className="app">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,700;0,800;0,900;1,700;1,800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap');
         *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-        :root{--cream:#f5f0e8;--warm:#faf8f3;--ink:#1a1208;--brown:#6b4c2a;--gold:#c9922a;--goldl:#e8c97a;--sage:#7a9e7e;--rust:#c4622d;--paper:#ede8dc;--border:#d4c9b0;--sh:rgba(26,18,8,.08)}
-        body{background:var(--cream);font-family:'DM Sans',sans-serif;color:var(--ink)}
-        .splash{display:flex;align-items:center;justify-content:center;height:100vh;font-family:'Playfair Display',serif;font-size:22px;color:var(--brown);font-style:italic}
-        .app{min-height:100vh;max-width:880px;margin:0 auto;padding:0 16px 80px}
-        .hdr{padding:32px 0 22px;border-bottom:2px solid var(--ink);margin-bottom:26px;display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
-        .hdr h1{font-family:'Playfair Display',serif;font-size:clamp(26px,6vw,42px);font-weight:700;letter-spacing:-.5px;line-height:1}
-        .hdr h1 em{font-style:italic;color:var(--gold)}
-        .hdr-sub{font-size:12px;color:var(--brown);margin-top:3px;text-transform:uppercase;letter-spacing:.08em}
-        .live-dot{display:inline-block;width:7px;height:7px;background:var(--sage);border-radius:50%;margin-right:5px;animation:pulse 2s infinite}
-        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-        .who{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
-        .who span{font-size:12px;color:var(--brown);text-transform:uppercase;letter-spacing:.06em}
-        .who-btn{background:none;border:1.5px solid var(--border);border-radius:20px;padding:4px 14px;font-size:13px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .15s;color:var(--ink)}
-        .who-btn.on{background:var(--ink);color:var(--cream);border-color:var(--ink)}
-        .who-btn:hover:not(.on){border-color:var(--ink)}
-        .stats{display:flex;gap:14px;margin-bottom:26px;flex-wrap:wrap}
-        .scard{background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:12px 18px;flex:1;min-width:90px}
-        .scard .n{font-family:'Playfair Display',serif;font-size:26px;font-weight:700;line-height:1}
-        .scard .l{font-size:11px;color:var(--brown);text-transform:uppercase;letter-spacing:.07em;margin-top:2px}
-        .tabs{display:flex;border-bottom:1.5px solid var(--border);margin-bottom:26px}
-        .tbtn{background:none;border:none;padding:9px 18px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;color:var(--brown);border-bottom:2.5px solid transparent;margin-bottom:-1.5px;transition:all .15s}
-        .tbtn.on{color:var(--ink);border-bottom-color:var(--gold)}
-        .tbtn:hover:not(.on){color:var(--ink)}
-        .blist{display:flex;flex-direction:column;gap:12px}
-        .bcard{background:var(--warm);border:1px solid var(--border);border-radius:12px;padding:16px 18px;display:flex;gap:14px;align-items:flex-start;transition:box-shadow .15s}
-        .bcard:hover{box-shadow:0 4px 18px var(--sh)}
-        .brank{font-family:'Playfair Display',serif;font-size:20px;color:var(--border);font-weight:700;min-width:28px;padding-top:2px}
+        :root{
+          --red:#E8000D;--yellow:#FFD600;--black:#0A0A0A;--white:#FFFFFF;
+          --offwhite:#F7F6F2;--grey:#E8E6E0;--midgrey:#999590;
+          --display:'Barlow Condensed',sans-serif;--body:'DM Sans',sans-serif;
+        }
+        body{background:var(--white);font-family:var(--body);color:var(--black)}
+        .app{min-height:100vh}
+        .hdr{background:var(--white);border-bottom:2px solid var(--black);padding:0 32px;display:flex;align-items:stretch;justify-content:space-between;gap:0;position:sticky;top:0;z-index:50}
+        .hdr-left{display:flex;align-items:center;gap:0;border-right:2px solid var(--black);padding-right:28px;margin-right:28px}
+        .logo{font-family:var(--display);font-size:42px;font-weight:900;text-transform:uppercase;letter-spacing:-1px;line-height:1;color:var(--black);padding:14px 0}
+        .logo span{color:var(--red)}
+        .live-pill{display:flex;align-items:center;gap:5px;background:var(--yellow);border:1.5px solid var(--black);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;margin-left:14px;white-space:nowrap}
+        .live-dot{width:6px;height:6px;background:var(--red);border-radius:50%;animation:pulse 2s infinite}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+        .who-wrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 0}
+        .who-label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--midgrey);white-space:nowrap}
+        .who-btn{background:none;border:1.5px solid var(--grey);border-radius:4px;padding:4px 11px;font-size:12px;font-family:var(--body);font-weight:500;cursor:pointer;transition:all .12s;color:var(--black);white-space:nowrap}
+        .who-btn.on{background:var(--black);color:var(--white);border-color:var(--black)}
+        .who-btn:hover:not(.on){border-color:var(--black)}
+        .hero{background:var(--red);padding:28px 32px;display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;border-bottom:2px solid var(--black)}
+        .hero-title{font-family:var(--display);font-size:clamp(52px,10vw,100px);font-weight:900;text-transform:uppercase;letter-spacing:-2px;line-height:.9;color:var(--white)}
+        .hero-title em{color:var(--yellow);font-style:italic}
+        .stats-row{display:flex;gap:2px}
+        .stat-box{background:var(--white);border:2px solid var(--black);padding:12px 20px;text-align:center;min-width:80px}
+        .stat-box:first-child{border-radius:4px 0 0 4px}
+        .stat-box:last-child{border-radius:0 4px 4px 0}
+        .stat-n{font-family:var(--display);font-size:34px;font-weight:900;line-height:1;color:var(--red)}
+        .stat-l{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--midgrey);margin-top:2px}
+        .tabs{display:flex;border-bottom:2px solid var(--black);background:var(--white);padding:0 32px}
+        .tbtn{background:none;border:none;border-bottom:3px solid transparent;margin-bottom:-2px;padding:14px 22px 14px 0;font-family:var(--display);font-size:18px;font-weight:800;text-transform:uppercase;letter-spacing:.02em;cursor:pointer;color:var(--midgrey);transition:all .12s;margin-right:8px}
+        .tbtn.on{color:var(--black);border-bottom-color:var(--red)}
+        .tbtn:hover:not(.on){color:var(--black)}
+        .content{padding:32px;max-width:1000px}
+        .section-header{display:flex;align-items:baseline;gap:12px;margin-bottom:22px;padding-bottom:14px;border-bottom:1.5px solid var(--grey)}
+        .section-title{font-family:var(--display);font-size:32px;font-weight:900;text-transform:uppercase;letter-spacing:-.5px}
+        .section-count{font-family:var(--display);font-size:18px;font-weight:700;color:var(--midgrey)}
+        .blist{display:flex;flex-direction:column;gap:2px}
+        .bcard{background:var(--white);border:1.5px solid var(--grey);border-radius:6px;padding:18px 20px;display:flex;gap:16px;align-items:flex-start;transition:border-color .12s,box-shadow .12s}
+        .bcard:hover{border-color:var(--black);box-shadow:4px 4px 0 var(--black)}
+        .brank{font-family:var(--display);font-size:28px;font-weight:900;color:var(--grey);min-width:36px;line-height:1;padding-top:4px}
+        .brank.top{color:var(--yellow);-webkit-text-stroke:1.5px var(--black)}
         .binfo{flex:1;min-width:0}
-        .btitle{font-family:'Playfair Display',serif;font-size:16px;font-weight:700}
-        .bauthor{font-size:13px;color:var(--brown);margin-top:1px}
-        .bgenre{display:inline-block;font-size:11px;background:var(--paper);border:1px solid var(--border);border-radius:20px;padding:2px 9px;margin-top:5px;color:var(--brown)}
-        .bratings{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
-        .mrat{font-size:12px;background:var(--cream);border-radius:20px;padding:2px 9px;display:flex;align-items:center;gap:3px}
-        .mrat .who2{color:var(--brown)}
-        .mrat .sc{font-weight:700;color:var(--gold)}
-        .bright{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
-        .avgscore{font-family:'Playfair Display',serif;font-size:30px;font-weight:700;line-height:1}
-        .avglbl{font-size:10px;color:var(--brown);text-transform:uppercase;letter-spacing:.07em}
-        .ratebtn{background:none;border:1.5px solid var(--gold);color:var(--gold);border-radius:20px;padding:3px 12px;font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .15s;white-space:nowrap}
-        .ratebtn:hover{background:var(--gold);color:#fff}
-        .addedbylbl{font-size:10px;color:var(--border);margin-top:3px}
-        .star-row{display:flex;align-items:center;gap:1px;flex-wrap:wrap}
-        .star{background:none;border:none;cursor:pointer;color:var(--border);padding:0;transition:color .1s;line-height:1}
-        .star.filled{color:var(--gold)}
+        .btitle{font-family:var(--display);font-size:22px;font-weight:800;text-transform:uppercase;letter-spacing:-.3px;line-height:1.1}
+        .bauthor{font-size:13px;color:var(--midgrey);margin-top:2px;font-style:italic}
+        .bgenre{display:inline-block;background:var(--yellow);border:1.5px solid var(--black);border-radius:3px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:2px 8px;margin-top:7px}
+        .bratings{display:flex;gap:5px;margin-top:10px;flex-wrap:wrap}
+        .mrat{font-size:12px;background:var(--offwhite);border:1px solid var(--grey);border-radius:3px;padding:2px 8px;display:flex;align-items:center;gap:4px}
+        .mrat.unrated{opacity:.35}
+        .mrat .who2{color:var(--midgrey);font-size:11px}
+        .mrat .sc{font-weight:700;color:var(--red)}
+        .bright{display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0}
+        .avgscore{font-family:var(--display);font-size:44px;font-weight:900;line-height:1;color:var(--black)}
+        .avglbl{font-size:10px;color:var(--midgrey);text-transform:uppercase;letter-spacing:.08em;text-align:right}
+        .addedbylbl{font-size:10px;color:var(--midgrey);margin-top:2px}
+        .ratebtn{background:var(--yellow);border:1.5px solid var(--black);border-radius:4px;padding:5px 14px;font-size:12px;font-weight:700;font-family:var(--body);text-transform:uppercase;letter-spacing:.05em;cursor:pointer;transition:all .12s;white-space:nowrap}
+        .ratebtn:hover{background:var(--black);color:var(--yellow)}
+        .star-row{display:flex;align-items:center;gap:2px;flex-wrap:wrap}
+        .star{background:none;border:none;cursor:pointer;color:var(--grey);padding:0;transition:color .1s;line-height:1}
+        .star.filled{color:var(--yellow);-webkit-text-stroke:.5px #b89a00}
         .star.readonly{cursor:default}
-        .star-label{font-size:14px;font-weight:700;margin-left:6px;color:var(--gold)}
-        .slist{display:flex;flex-direction:column;gap:11px}
-        .scard2{background:var(--warm);border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;align-items:flex-start;gap:12px}
+        .star-label{font-size:15px;font-weight:700;margin-left:7px;color:var(--red);font-family:var(--display)}
+        .slist{display:flex;flex-direction:column;gap:2px}
+        .scard{background:var(--white);border:1.5px solid var(--grey);border-radius:6px;padding:16px 18px;display:flex;align-items:flex-start;gap:14px;transition:border-color .12s,box-shadow .12s}
+        .scard:hover{border-color:var(--black);box-shadow:4px 4px 0 var(--black)}
         .sinfo{flex:1;min-width:0}
-        .stitle{font-family:'Playfair Display',serif;font-size:15px;font-weight:700}
-        .sauthor{font-size:13px;color:var(--brown);margin-top:1px}
-        .smeta{font-size:11px;color:var(--brown);margin-top:3px}
-        .sreason{font-size:12px;color:var(--ink);margin-top:6px;font-style:italic;opacity:.75}
-        .vbtn{display:flex;flex-direction:column;align-items:center;gap:1px;background:none;border:1.5px solid var(--border);border-radius:10px;padding:7px 12px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;min-width:50px;flex-shrink:0}
-        .vbtn.on{background:var(--sage);border-color:var(--sage);color:#fff}
-        .vbtn:hover:not(.on){border-color:var(--sage)}
-        .vcnt{font-size:17px;font-weight:700;font-family:'Playfair Display',serif}
-        .vlbl{font-size:10px;text-transform:uppercase;letter-spacing:.06em}
-        .aibtn{width:100%;padding:13px;background:var(--ink);color:var(--cream);border:none;border-radius:12px;font-family:'Playfair Display',serif;font-size:16px;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:7px}
-        .aibtn:hover{background:var(--brown)}
-        .aibtn:disabled{opacity:.6;cursor:not-allowed}
-        .airec{margin-top:16px;background:var(--ink);color:var(--cream);border-radius:16px;padding:22px 20px;position:relative;overflow:hidden}
-        .airec::before{content:'';position:absolute;top:-20px;right:-20px;width:100px;height:100px;border-radius:50%;background:rgba(201,146,42,.12);pointer-events:none}
-        .aibadge{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--goldl);margin-bottom:10px}
-        .aititle{font-family:'Playfair Display',serif;font-size:21px;font-weight:700}
-        .aiauthor{font-size:13px;color:var(--goldl);margin-top:3px}
-        .aiwhy{font-size:14px;line-height:1.65;margin-top:12px;color:rgba(245,240,232,.85)}
-        .aimembers{display:flex;flex-direction:column;gap:5px;margin-top:14px;padding-top:12px;border-top:1px solid rgba(245,240,232,.12)}
-        .aimem{font-size:12px;color:rgba(245,240,232,.65)}
-        .aimem strong{color:rgba(245,240,232,.9);margin-right:4px}
-        .aiinsight{font-size:12px;margin-top:10px;padding-top:10px;border-top:1px solid rgba(245,240,232,.12);color:rgba(245,240,232,.5);font-style:italic}
-        .aimatch{display:inline-block;background:var(--gold);color:var(--ink);font-size:12px;font-weight:700;border-radius:20px;padding:2px 11px;margin-top:10px}
-        .aifromsugg{display:inline-block;background:var(--sage);color:#fff;font-size:11px;border-radius:20px;padding:2px 9px;margin-left:7px}
-        .addbtn{display:flex;align-items:center;gap:6px;background:none;border:1.5px dashed var(--border);border-radius:12px;padding:11px 16px;width:100%;cursor:pointer;color:var(--brown);font-family:'DM Sans',sans-serif;font-size:14px;transition:all .15s;margin-top:8px}
-        .addbtn:hover{border-color:var(--ink);color:var(--ink)}
-        .aform{background:var(--warm);border:1px solid var(--border);border-radius:12px;padding:18px;margin-top:8px;display:flex;flex-direction:column;gap:11px}
-        .frow{display:flex;gap:9px;flex-wrap:wrap}
-        .fgrp{display:flex;flex-direction:column;gap:3px;flex:1;min-width:150px}
-        .fgrp label{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--brown)}
-        .fgrp input,.fgrp select,.fgrp textarea{padding:8px 11px;border:1px solid var(--border);border-radius:8px;background:var(--cream);font-family:'DM Sans',sans-serif;font-size:14px;color:var(--ink);outline:none;transition:border-color .15s}
-        .fgrp textarea{resize:vertical;min-height:64px}
-        .fgrp input:focus,.fgrp select:focus,.fgrp textarea:focus{border-color:var(--gold)}
-        .factions{display:flex;gap:7px}
-        .bprimary{background:var(--ink);color:var(--cream);border:none;border-radius:8px;padding:9px 18px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;transition:background .15s}
-        .bprimary:hover{background:var(--brown)}
-        .bcancel{background:none;border:1px solid var(--border);border-radius:8px;color:var(--brown);padding:9px 14px;font-family:'DM Sans',sans-serif;font-size:14px;cursor:pointer}
-        .rlbl{font-size:13px;color:var(--brown);margin-bottom:7px}
-        .overlay{position:fixed;inset:0;background:rgba(26,18,8,.5);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px}
-        .modal{background:var(--warm);border-radius:16px;padding:26px;max-width:370px;width:100%;box-shadow:0 20px 60px rgba(26,18,8,.2)}
-        .modal h3{font-family:'Playfair Display',serif;font-size:19px;margin-bottom:3px}
-        .modal p{font-size:13px;color:var(--brown);margin-bottom:14px}
-        .sectitle{font-family:'Playfair Display',serif;font-size:19px;font-weight:700;margin-bottom:14px}
-        .empty{text-align:center;padding:36px;color:var(--brown);font-size:14px;font-style:italic}
-        .ai-intro{font-size:14px;color:var(--brown);margin-bottom:18px;line-height:1.6}
-        .aierr{margin-top:14px;padding:14px;background:var(--paper);border-radius:10px;color:var(--rust);font-size:14px}
-        @media(max-width:600px){.bcard{flex-wrap:wrap}.bright{flex-direction:row;align-items:center;width:100%}.tbtn{padding:9px 10px;font-size:12px}}
+        .stitle{font-family:var(--display);font-size:20px;font-weight:800;text-transform:uppercase;letter-spacing:-.2px}
+        .sauthor{font-size:13px;color:var(--midgrey);font-style:italic;margin-top:1px}
+        .smeta{font-size:11px;color:var(--midgrey);margin-top:4px;text-transform:uppercase;letter-spacing:.05em}
+        .sreason{font-size:13px;color:var(--black);margin-top:7px;font-style:italic;padding-left:10px;border-left:3px solid var(--yellow)}
+        .voters{font-size:11px;color:var(--midgrey);margin-top:5px}
+        .vbtn{display:flex;flex-direction:column;align-items:center;gap:1px;background:var(--white);border:1.5px solid var(--grey);border-radius:6px;padding:10px 14px;cursor:pointer;font-family:var(--body);transition:all .12s;min-width:54px;flex-shrink:0}
+        .vbtn.on{background:var(--red);border-color:var(--red);color:var(--white)}
+        .vbtn:hover:not(.on){border-color:var(--black);box-shadow:3px 3px 0 var(--black)}
+        .vcnt{font-family:var(--display);font-size:22px;font-weight:900;line-height:1}
+        .vlbl{font-size:9px;text-transform:uppercase;letter-spacing:.07em}
+        .ai-intro{font-size:14px;color:var(--midgrey);margin-bottom:20px;line-height:1.6;max-width:560px}
+        .aibtn{width:100%;max-width:500px;padding:16px 24px;background:var(--red);color:var(--white);border:2px solid var(--black);border-radius:6px;font-family:var(--display);font-size:22px;font-weight:900;text-transform:uppercase;letter-spacing:.02em;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:4px 4px 0 var(--black)}
+        .aibtn:hover{background:var(--black);box-shadow:6px 6px 0 var(--red)}
+        .aibtn:disabled{opacity:.6;cursor:not-allowed;box-shadow:none}
+        .airec{margin-top:24px;background:var(--black);color:var(--white);border-radius:8px;border:2px solid var(--black);overflow:hidden;max-width:700px}
+        .airec-top{background:var(--red);padding:14px 22px;display:flex;align-items:center;justify-content:space-between}
+        .aibadge{font-family:var(--display);font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:.1em;color:var(--white)}
+        .airec-body{padding:24px 22px}
+        .aititle{font-family:var(--display);font-size:clamp(28px,5vw,42px);font-weight:900;text-transform:uppercase;letter-spacing:-1px;line-height:1;color:var(--yellow)}
+        .aiauthor{font-size:14px;color:rgba(255,255,255,.6);margin-top:5px;font-style:italic}
+        .aifromsugg{display:inline-block;background:var(--yellow);color:var(--black);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;border-radius:3px;padding:2px 8px;margin-left:8px}
+        .aiwhy{font-size:14px;line-height:1.7;margin-top:16px;color:rgba(255,255,255,.8)}
+        .aimembers{display:flex;flex-direction:column;gap:6px;margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,.1)}
+        .aimem{font-size:12px;color:rgba(255,255,255,.55)}
+        .aimem strong{color:var(--yellow);margin-right:5px;font-family:var(--display);font-size:13px;text-transform:uppercase}
+        .aiinsight{font-size:12px;margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.4);font-style:italic}
+        .aimatch{display:inline-block;background:var(--yellow);color:var(--black);font-family:var(--display);font-size:14px;font-weight:900;border-radius:3px;padding:3px 12px}
+        .aierr{margin-top:16px;padding:16px;background:var(--offwhite);border:1.5px solid var(--grey);border-radius:6px;color:var(--red);font-size:14px}
+        .addbtn{display:flex;align-items:center;gap:8px;background:none;border:1.5px dashed var(--grey);border-radius:6px;padding:13px 18px;width:100%;cursor:pointer;color:var(--midgrey);font-family:var(--body);font-size:14px;font-weight:500;transition:all .12s;margin-top:10px;text-transform:uppercase;letter-spacing:.05em}
+        .addbtn:hover{border-color:var(--black);color:var(--black);background:var(--offwhite)}
+        .aform{background:var(--offwhite);border:1.5px solid var(--black);border-radius:6px;padding:20px;margin-top:10px;display:flex;flex-direction:column;gap:14px;box-shadow:4px 4px 0 var(--black)}
+        .frow{display:flex;gap:12px;flex-wrap:wrap}
+        .fgrp{display:flex;flex-direction:column;gap:4px;flex:1;min-width:150px}
+        .fgrp label{font-size:10px;text-transform:uppercase;letter-spacing:.1em;font-weight:700;color:var(--midgrey)}
+        .fgrp input,.fgrp select,.fgrp textarea{padding:9px 12px;border:1.5px solid var(--black);border-radius:4px;background:var(--white);font-family:var(--body);font-size:14px;color:var(--black);outline:none;transition:box-shadow .12s}
+        .fgrp textarea{resize:vertical;min-height:70px}
+        .fgrp input:focus,.fgrp select:focus,.fgrp textarea:focus{box-shadow:3px 3px 0 var(--black)}
+        .factions{display:flex;gap:8px}
+        .bprimary{background:var(--black);color:var(--white);border:1.5px solid var(--black);border-radius:4px;padding:10px 20px;font-family:var(--body);font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;cursor:pointer;transition:all .12s}
+        .bprimary:hover{background:var(--red);border-color:var(--red)}
+        .bcancel{background:none;border:1.5px solid var(--grey);border-radius:4px;color:var(--midgrey);padding:10px 16px;font-family:var(--body);font-size:13px;cursor:pointer;transition:all .12s}
+        .bcancel:hover{border-color:var(--black);color:var(--black)}
+        .rlbl{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--midgrey);margin-bottom:8px;font-weight:700}
+        .overlay{position:fixed;inset:0;background:rgba(10,10,10,.6);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px}
+        .modal{background:var(--white);border-radius:8px;border:2px solid var(--black);padding:28px;max-width:380px;width:100%;box-shadow:8px 8px 0 var(--black)}
+        .modal h3{font-family:var(--display);font-size:24px;font-weight:900;text-transform:uppercase;margin-bottom:4px}
+        .modal p{font-size:13px;color:var(--midgrey);margin-bottom:16px;font-style:italic}
+        .empty{text-align:center;padding:48px 32px;color:var(--midgrey)}
+        .empty-title{font-family:var(--display);font-size:28px;font-weight:900;text-transform:uppercase;color:var(--grey)}
+        .empty-sub{font-size:14px;margin-top:6px}
+        @media(max-width:640px){
+          .hdr{flex-direction:column;padding:16px;gap:12px}
+          .hdr-left{border-right:none;padding-right:0;border-bottom:1.5px solid var(--black);padding-bottom:12px;margin-right:0}
+          .hero{padding:20px 16px}
+          .tabs{padding:0 16px}
+          .content{padding:20px 16px}
+          .bcard{flex-wrap:wrap}
+          .bright{flex-direction:row;align-items:center;width:100%}
+        }
       `}</style>
 
       <div className="hdr">
-        <div>
-          <h1>The <em>Chapter</em> Club</h1>
-          <div className="hdr-sub"><span className="live-dot"/>Live · {MEMBERS.length} members</div>
+        <div className="hdr-left">
+          <div className="logo">BOOKED<span>.</span>IN</div>
+          <div className="live-pill"><span className="live-dot"/>{MEMBERS.length} members</div>
         </div>
-        <div className="who">
-          <span>You are:</span>
+        <div className="who-wrap">
+          <span className="who-label">You are:</span>
           {MEMBERS.map(m => (
             <button key={m} className={`who-btn ${currentUser===m?"on":""}`} onClick={()=>setCurrentUser(m)}>{m}</button>
           ))}
         </div>
       </div>
 
-      <div className="stats">
-        <div className="scard"><div className="n">{books.length}</div><div className="l">Books Read</div></div>
-        <div className="scard"><div className="n">{MEMBERS.length}</div><div className="l">Members</div></div>
-        <div className="scard"><div className="n">{suggestions.length}</div><div className="l">Suggestions</div></div>
-        <div className="scard">
-          <div className="n">{books.length ? (books.reduce((s,b)=>s+(parseFloat(avgRating(b.ratings))||0),0)/books.length).toFixed(1) : "—"}</div>
-          <div className="l">Avg Rating</div>
+      <div className="hero">
+        <div className="hero-title">
+          {tab==="library" && <><em>Our</em> Reading<br/>List</>}
+          {tab==="suggestions" && <>What&apos;s<br/><em>Next?</em></>}
+          {tab==="recommend" && <>AI<br/><em>Picks</em></>}
+        </div>
+        <div className="stats-row">
+          <div className="stat-box"><div className="stat-n">{books.length}</div><div className="stat-l">Read</div></div>
+          <div className="stat-box">
+            <div className="stat-n">{books.length?(books.reduce((s,b)=>s+(parseFloat(avgRating(b.ratings))||0),0)/books.length).toFixed(1):"—"}</div>
+            <div className="stat-l">Avg Score</div>
+          </div>
+          <div className="stat-box"><div className="stat-n">{suggestions.length}</div><div className="stat-l">Ideas</div></div>
         </div>
       </div>
 
@@ -283,152 +326,153 @@ Respond ONLY with valid JSON (no markdown):
         ))}
       </div>
 
-      {tab==="library" && (
-        <div>
-          <div className="sectitle">Books we've read</div>
-          {sortedBooks.length===0 && <div className="empty">No books yet — add your first one!</div>}
-          <div className="blist">
-            {sortedBooks.map((book,i) => (
-              <div key={book.id} className="bcard">
-                <div className="brank">#{i+1}</div>
-                <div className="binfo">
-                  <div className="btitle">{book.title}</div>
-                  <div className="bauthor">{book.author}</div>
-                  <span className="bgenre">{book.genre}</span>
-                  <div className="bratings">
-                    {Object.entries(book.ratings||{}).map(([m,r])=>(
-                      <div key={m} className="mrat"><span className="who2">{m}</span><span className="sc">{r}/10</span></div>
-                    ))}
-                    {MEMBERS.filter(m=>!(book.ratings||{})[m]).map(m=>(
-                      <div key={m} className="mrat" style={{opacity:.35}}><span className="who2">{m}</span><span className="sc">–</span></div>
-                    ))}
+      <div className="content">
+        {tab==="library" && (
+          <div>
+            <div className="section-header">
+              <div className="section-title">Books Read</div>
+              <div className="section-count">{books.length}</div>
+            </div>
+            {sortedBooks.length===0 && <div className="empty"><div className="empty-title">No Books Yet</div><div className="empty-sub">Add your first book below</div></div>}
+            <div className="blist">
+              {sortedBooks.map((book,i)=>(
+                <div key={book.id} className="bcard">
+                  <div className={`brank ${i===0?"top":""}`}>#{i+1}</div>
+                  <div className="binfo">
+                    <div className="btitle">{book.title}</div>
+                    <div className="bauthor">{book.author}</div>
+                    <span className="bgenre">{book.genre}</span>
+                    <div className="bratings">
+                      {Object.entries(book.ratings||{}).map(([m,r])=>(
+                        <div key={m} className="mrat"><span className="who2">{m}</span><span className="sc">{r}/10</span></div>
+                      ))}
+                      {MEMBERS.filter(m=>!(book.ratings||{})[m]).map(m=>(
+                        <div key={m} className="mrat unrated"><span className="who2">{m}</span><span className="sc">–</span></div>
+                      ))}
+                    </div>
+                    <div className="addedbylbl">Added by {book.added_by}</div>
                   </div>
-                  <div className="addedbylbl">Added by {book.added_by}</div>
+                  <div className="bright">
+                    <div><div className="avgscore">{avgRating(book.ratings)||"—"}</div><div className="avglbl">avg / 10</div></div>
+                    {!(book.ratings||{})[currentUser] && (
+                      <button className="ratebtn" onClick={()=>{setRateModal(book);setMyRating(7)}}>Rate</button>
+                    )}
+                  </div>
                 </div>
-                <div className="bright">
-                  <div>
-                    <div className="avgscore">{avgRating(book.ratings)||"—"}</div>
-                    <div className="avglbl">avg / 10</div>
+              ))}
+            </div>
+            {showAddBook?(
+              <div className="aform">
+                <div className="frow">
+                  <div className="fgrp"><label>Title</label><input value={newBook.title} onChange={e=>setNewBook(b=>({...b,title:e.target.value}))} placeholder="Book title"/></div>
+                  <div className="fgrp"><label>Author</label><input value={newBook.author} onChange={e=>setNewBook(b=>({...b,author:e.target.value}))} placeholder="Author name"/></div>
+                </div>
+                <div className="frow">
+                  <div className="fgrp"><label>Genre</label><select value={newBook.genre} onChange={e=>setNewBook(b=>({...b,genre:e.target.value}))}>{GENRES.map(g=><option key={g}>{g}</option>)}</select></div>
+                </div>
+                <div><div className="rlbl">Your Rating</div><StarRating value={newBook.myRating} onChange={v=>setNewBook(b=>({...b,myRating:v}))}/></div>
+                <div className="factions">
+                  <button className="bprimary" onClick={addBook}>Add Book</button>
+                  <button className="bcancel" onClick={()=>setShowAddBook(false)}>Cancel</button>
+                </div>
+              </div>
+            ):(
+              <button className="addbtn" onClick={()=>setShowAddBook(true)}>＋ Add a book we've read</button>
+            )}
+          </div>
+        )}
+
+        {tab==="suggestions" && (
+          <div>
+            <div className="section-header">
+              <div className="section-title">Suggestions</div>
+              <div className="section-count">{suggestions.length}</div>
+            </div>
+            {sortedSuggs.length===0 && <div className="empty"><div className="empty-title">No Suggestions Yet</div><div className="empty-sub">Be the first to suggest one</div></div>}
+            <div className="slist">
+              {sortedSuggs.map(s=>(
+                <div key={s.id} className="scard">
+                  <div className="sinfo">
+                    <div className="stitle">{s.title}</div>
+                    <div className="sauthor">{s.author}</div>
+                    <div className="smeta">{s.genre} · Suggested by {s.suggested_by}</div>
+                    {s.reason && <div className="sreason">{s.reason}</div>}
+                    {s.votes?.length>0 && <div className="voters">👍 {s.votes.join(", ")}</div>}
                   </div>
-                  {!(book.ratings||{})[currentUser] && (
-                    <button className="ratebtn" onClick={()=>{setRateModal(book);setMyRating(7)}}>Rate it</button>
+                  <button className={`vbtn ${s.votes?.includes(currentUser)?"on":""}`} onClick={()=>toggleVote(s)}>
+                    <span className="vcnt">{s.votes?.length||0}</span>
+                    <span className="vlbl">{s.votes?.includes(currentUser)?"✓":"Vote"}</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+            {showAddSugg?(
+              <div className="aform">
+                <div className="frow">
+                  <div className="fgrp"><label>Title</label><input value={newSugg.title} onChange={e=>setNewSugg(s=>({...s,title:e.target.value}))} placeholder="Book title"/></div>
+                  <div className="fgrp"><label>Author</label><input value={newSugg.author} onChange={e=>setNewSugg(s=>({...s,author:e.target.value}))} placeholder="Author name"/></div>
+                </div>
+                <div className="frow">
+                  <div className="fgrp"><label>Genre</label><select value={newSugg.genre} onChange={e=>setNewSugg(s=>({...s,genre:e.target.value}))}>{GENRES.map(g=><option key={g}>{g}</option>)}</select></div>
+                </div>
+                <div className="fgrp"><label>Why this book? (optional)</label>
+                  <textarea value={newSugg.reason} onChange={e=>setNewSugg(s=>({...s,reason:e.target.value}))} placeholder="Tell the group why you think they'd love it…"/>
+                </div>
+                <div className="factions">
+                  <button className="bprimary" onClick={addSuggestion}>Submit</button>
+                  <button className="bcancel" onClick={()=>setShowAddSugg(false)}>Cancel</button>
+                </div>
+              </div>
+            ):(
+              <button className="addbtn" onClick={()=>setShowAddSugg(true)}>＋ Suggest our next book</button>
+            )}
+          </div>
+        )}
+
+        {tab==="recommend" && (
+          <div>
+            <div className="section-header"><div className="section-title">AI Pick</div></div>
+            <p className="ai-intro">Claude analyses everyone's ratings, suggestions, and collective taste — then picks the perfect next read for all {MEMBERS.length} of you.</p>
+            <button className="aibtn" onClick={getAIRec} disabled={aiLoading}>
+              {aiLoading?"✦ Analysing your taste…":"✦ Recommend our next book"}
+            </button>
+            {aiRec && !aiRec.error && (
+              <div className="airec">
+                <div className="airec-top">
+                  <div className="aibadge">✦ Your next read</div>
+                  {aiRec.matchScore && <div className="aimatch">{aiRec.matchScore}% match</div>}
+                </div>
+                <div className="airec-body">
+                  <div className="aititle">{aiRec.title}</div>
+                  <div className="aiauthor">by {aiRec.author} · {aiRec.genre}
+                    {aiRec.fromSuggestions && <span className="aifromsugg">from your list</span>}
+                  </div>
+                  <div className="aiwhy">{aiRec.whyThisBook}</div>
+                  {aiRec.memberFit && (
+                    <div className="aimembers">
+                      {Object.entries(aiRec.memberFit).map(([m,why])=>(
+                        <div key={m} className="aimem"><strong>{m}</strong>{why}</div>
+                      ))}
+                    </div>
                   )}
+                  {aiRec.groupTasteInsight && <div className="aiinsight">"{aiRec.groupTasteInsight}"</div>}
                 </div>
               </div>
-            ))}
+            )}
+            {aiRec?.error && <div className="aierr">Couldn't get a recommendation right now — try again in a moment.</div>}
           </div>
-          {showAddBook ? (
-            <div className="aform">
-              <div className="frow">
-                <div className="fgrp"><label>Title</label><input value={newBook.title} onChange={e=>setNewBook(b=>({...b,title:e.target.value}))} placeholder="Book title"/></div>
-                <div className="fgrp"><label>Author</label><input value={newBook.author} onChange={e=>setNewBook(b=>({...b,author:e.target.value}))} placeholder="Author name"/></div>
-              </div>
-              <div className="frow">
-                <div className="fgrp"><label>Genre</label>
-                  <select value={newBook.genre} onChange={e=>setNewBook(b=>({...b,genre:e.target.value}))}>
-                    {GENRES.map(g=><option key={g}>{g}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div><div className="rlbl">Your rating</div><StarRating value={newBook.myRating} onChange={v=>setNewBook(b=>({...b,myRating:v}))}/></div>
-              <div className="factions">
-                <button className="bprimary" onClick={addBook}>Add book</button>
-                <button className="bcancel" onClick={()=>setShowAddBook(false)}>Cancel</button>
-              </div>
-            </div>
-          ) : (
-            <button className="addbtn" onClick={()=>setShowAddBook(true)}>＋ Add a book we've read</button>
-          )}
-        </div>
-      )}
-
-      {tab==="suggestions" && (
-        <div>
-          <div className="sectitle">What should we read next?</div>
-          {sortedSuggs.length===0 && <div className="empty">No suggestions yet — be the first!</div>}
-          <div className="slist">
-            {sortedSuggs.map(s=>(
-              <div key={s.id} className="scard2">
-                <div className="sinfo">
-                  <div className="stitle">{s.title}</div>
-                  <div className="sauthor">{s.author}</div>
-                  <div className="smeta">{s.genre} · suggested by {s.suggested_by}</div>
-                  {s.reason && <div className="sreason">"{s.reason}"</div>}
-                  <div className="smeta" style={{marginTop:5}}>{s.votes?.length>0 && `👍 ${s.votes.join(", ")}`}</div>
-                </div>
-                <button className={`vbtn ${s.votes?.includes(currentUser)?"on":""}`} onClick={()=>toggleVote(s)}>
-                  <span className="vcnt">{s.votes?.length||0}</span>
-                  <span className="vlbl">{s.votes?.includes(currentUser)?"✓ voted":"vote"}</span>
-                </button>
-              </div>
-            ))}
-          </div>
-          {showAddSugg ? (
-            <div className="aform">
-              <div className="frow">
-                <div className="fgrp"><label>Title</label><input value={newSugg.title} onChange={e=>setNewSugg(s=>({...s,title:e.target.value}))} placeholder="Book title"/></div>
-                <div className="fgrp"><label>Author</label><input value={newSugg.author} onChange={e=>setNewSugg(s=>({...s,author:e.target.value}))} placeholder="Author name"/></div>
-              </div>
-              <div className="frow">
-                <div className="fgrp"><label>Genre</label>
-                  <select value={newSugg.genre} onChange={e=>setNewSugg(s=>({...s,genre:e.target.value}))}>
-                    {GENRES.map(g=><option key={g}>{g}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div className="fgrp"><label>Why this book? (optional)</label>
-                <textarea value={newSugg.reason} onChange={e=>setNewSugg(s=>({...s,reason:e.target.value}))} placeholder="Tell the group why you think they'd love it…"/>
-              </div>
-              <div className="factions">
-                <button className="bprimary" onClick={addSuggestion}>Submit suggestion</button>
-                <button className="bcancel" onClick={()=>setShowAddSugg(false)}>Cancel</button>
-              </div>
-            </div>
-          ) : (
-            <button className="addbtn" onClick={()=>setShowAddSugg(true)}>＋ Suggest a book</button>
-          )}
-        </div>
-      )}
-
-      {tab==="recommend" && (
-        <div>
-          <div className="sectitle">AI Book Recommendation</div>
-          <p className="ai-intro">Claude analyses your group's ratings, everyone's suggestions, and your collective taste — then picks the perfect next read for all 12 of you.</p>
-          <button className="aibtn" onClick={getAIRec} disabled={aiLoading}>
-            {aiLoading ? "✦ Analysing your taste…" : "✦ Recommend our next book"}
-          </button>
-          {aiRec && !aiRec.error && (
-            <div className="airec">
-              <div className="aibadge">✦ Your next read</div>
-              <div className="aititle">{aiRec.title}</div>
-              <div className="aiauthor">by {aiRec.author} · {aiRec.genre}
-                {aiRec.fromSuggestions && <span className="aifromsugg">from your suggestions</span>}
-              </div>
-              <div className="aiwhy">{aiRec.whyThisBook}</div>
-              {aiRec.memberFit && (
-                <div className="aimembers">
-                  {Object.entries(aiRec.memberFit).map(([m,why])=>(
-                    <div key={m} className="aimem"><strong>{m}:</strong>{why}</div>
-                  ))}
-                </div>
-              )}
-              {aiRec.matchScore && <div className="aimatch">{aiRec.matchScore}% group match</div>}
-              {aiRec.groupTasteInsight && <div className="aiinsight">"{aiRec.groupTasteInsight}"</div>}
-            </div>
-          )}
-          {aiRec?.error && <div className="aierr">Couldn't get a recommendation right now — try again in a moment.</div>}
-        </div>
-      )}
+        )}
+      </div>
 
       {rateModal && (
         <div className="overlay" onClick={()=>setRateModal(null)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
             <h3>{rateModal.title}</h3>
             <p>by {rateModal.author} · rating as {currentUser}</p>
-            <div className="rlbl">Your score out of 10:</div>
+            <div className="rlbl">Your Score Out of 10</div>
             <StarRating value={myRating} onChange={setMyRating}/>
-            <div className="factions" style={{marginTop:18}}>
-              <button className="bprimary" onClick={()=>rateBook(rateModal.id)}>Save rating</button>
+            <div className="factions" style={{marginTop:20}}>
+              <button className="bprimary" onClick={()=>rateBook(rateModal.id)}>Save Rating</button>
               <button className="bcancel" onClick={()=>setRateModal(null)}>Cancel</button>
             </div>
           </div>
