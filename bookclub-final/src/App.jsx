@@ -268,14 +268,14 @@ Respond ONLY with a valid JSON array, no markdown:
   const myPersonalBooks = personalBooks.filter(b => b.member === currentUser);
 
   if (loading) return (
-    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"'Barlow Condensed',sans-serif",fontSize:52,fontWeight:900,color:"#C8391B",textTransform:"uppercase",letterSpacing:-2,background:"#F5F2EC"}}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@900&display=swap');*{margin:0;padding:0;box-sizing:border-box}`}</style>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"'Inter',sans-serif",fontSize:52,fontWeight:900,color:"#C8391B",textTransform:"uppercase",letterSpacing:-2,background:"#F5F2EC"}}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@900&display=swap');*{margin:0;padding:0;box-sizing:border-box}`}</style>
       BOOKED.IN
     </div>
   );
 
   const CSS = `
-    @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;0,900;1,700;1,900&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=DM+Serif+Display:ital@0;1&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     :root{
       --bg:#F5F2EC;
@@ -285,9 +285,9 @@ Respond ONLY with a valid JSON array, no markdown:
       --black:#1A1208;
       --border:#DDD8CE;
       --mid:#8A8278;
-      --D:'Barlow Condensed',sans-serif;
-      --S:'DM Serif Display',serif;
-      --B:'DM Sans',sans-serif;
+      --D:'Inter',sans-serif;
+      --S:'Inter',sans-serif;
+      --B:'Inter',sans-serif;
     }
     body{background:var(--bg);font-family:var(--B);color:var(--black);-webkit-font-smoothing:antialiased}
     .app{min-height:100vh}
@@ -392,7 +392,7 @@ Respond ONLY with a valid JSON array, no markdown:
     .content{padding:28px 32px;max-width:900px}
 
     .section-hdr{display:flex;align-items:baseline;gap:10px;margin-bottom:20px}
-    .section-title{font-family:var(--S);font-size:26px;font-weight:400;font-style:italic;letter-spacing:-.3px}
+    .section-title{font-family:var(--S);font-size:26px;font-weight:400;letter-spacing:-.3px}
     .section-count{font-size:13px;color:var(--mid);font-family:var(--B)}
 
     /* ── BOOK CARDS ── */
@@ -529,7 +529,7 @@ Respond ONLY with a valid JSON array, no markdown:
     /* ── MODAL ── */
     .overlay{position:fixed;inset:0;background:rgba(26,18,8,.5);z-index:400;display:flex;align-items:center;justify-content:center;padding:16px}
     .modal{background:#fff;border-radius:10px;border:1px solid var(--border);padding:24px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(26,18,8,.2);max-height:90vh;overflow-y:auto}
-    .modal h3{font-family:var(--S);font-size:20px;font-weight:400;font-style:italic;margin-bottom:3px}
+    .modal h3{font-family:var(--S);font-size:18px;font-weight:700;letter-spacing:-.3px;margin-bottom:3px}
     .modal p{font-size:12px;color:var(--mid);margin-bottom:14px}
     .modal-textarea{padding:8px 10px;border:1px solid var(--border);border-radius:5px;font-family:var(--B);font-size:13px;outline:none;resize:vertical;width:100%;min-height:80px;transition:border-color .12s}
     .modal-textarea:focus{border-color:var(--red)}
