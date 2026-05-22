@@ -8,7 +8,7 @@ const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const GENRES = ["Literary Fiction","Fiction","Memoir","Non-Fiction","Mystery","Sci-Fi","Fantasy","Historical Fiction","Romance","Thriller","Biography","Self-Help","Crime","Short Stories","Poetry"];
-const MEMBERS = ["Tash","Chloe","Ali","Ellie","Bec","Rachel","Soph","Emma","Georgie","Izzy","Maddie","Cassie"];
+const MEMBERS = ["Ali","Bec","Cassie","Chloe","Chloe VN","Deem","Ellie","Emma","Erin","Evie","Gabby","Georgie","Hannah","Hannah G","Harriet","Izzy","Jorgia","Lara","Lillay","Maddie","Molly","Pip","Rachel","Ruby","Sanyogita","Soph","Tash"];];
 const ADMIN = "Ellie";
 
 function avgRating(ratings) {
@@ -28,12 +28,12 @@ async function searchGoogleBooks(query) {
       author: (item.volumeInfo.authors || []).join(", "),
       genre: (item.volumeInfo.categories || ["Fiction"])[0].split("/")[0].trim(),
       description: item.volumeInfo.description || "",
-      cover: item.volumeInfo.imageLinks?.thumbnail?.replace("http://","https://") || null,
+      cover: item.volumeInfo.imageLinks?.thumbnail?.replace("http://","https://").replace("zoom=1","zoom=2") || null,
     }));
   } catch { return []; }
 }
 
-function StarRating({ value, onChange, readonly, size = 20 }) {
+function StarRating({ value, onChange, readonly, size = 18 }) {
   return (
     <div className="star-row">
       {[...Array(10)].map((_, i) => (
@@ -45,7 +45,7 @@ function StarRating({ value, onChange, readonly, size = 20 }) {
   );
 }
 
-function BookSearchInput({ onSelect, placeholder = "Search for a book…" }) {
+function BookSearchInput({ onSelect }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -72,13 +72,13 @@ function BookSearchInput({ onSelect, placeholder = "Search for a book…" }) {
 
   return (
     <div style={{ position: "relative" }}>
-      <input className="search-input" value={query} onChange={handleChange} placeholder={placeholder} autoComplete="off"/>
+      <input className="search-input" value={query} onChange={handleChange} placeholder="Search by title or author…" autoComplete="off"/>
       {searching && <div className="search-loading">Searching…</div>}
       {results.length > 0 && (
         <div className="search-dropdown">
           {results.map(b => (
             <div key={b.googleId} className="search-result" onClick={() => pick(b)}>
-              {b.cover && <img src={b.cover} alt="" className="search-cover"/>}
+              {b.cover ? <img src={b.cover} alt="" className="search-cover"/> : <div className="search-cover-ph">📖</div>}
               <div>
                 <div className="search-result-title">{b.title}</div>
                 <div className="search-result-author">{b.author} · {b.genre}</div>
@@ -97,7 +97,6 @@ export default function BookClub() {
   const [personalBooks, setPersonalBooks] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
   const [tab, setTab] = useState("library");
-  const [profileMember, setProfileMember] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const [showAddBook, setShowAddBook] = useState(false);
@@ -143,22 +142,17 @@ export default function BookClub() {
     return () => subs.forEach(s => s.unsubscribe());
   }, [fetchAll]);
 
-  // ── Book club actions ──
   async function addBook() {
     if (!newBook.title.trim() || !newBook.author.trim()) return;
     if (!currentUser) { alert("Please select your name first!"); return; }
     const { error } = await supabase.from("books").insert({
-      title: newBook.title.trim(),
-      author: newBook.author.trim(),
-      genre: newBook.genre,
-      ratings: { [currentUser]: newBook.myRating },
-      comments: {},
-      cover: newBook.cover || null,
+      title: newBook.title.trim(), author: newBook.author.trim(),
+      genre: newBook.genre, ratings: { [currentUser]: newBook.myRating },
+      comments: {}, cover: newBook.cover || null,
       description: newBook.description || null,
-      google_id: newBook.googleId || null,
-      added_by: currentUser,
+      google_id: newBook.googleId || null, added_by: currentUser,
     });
-    if (error) { alert("Error saving book: " + error.message); return; }
+    if (error) { alert("Error: " + error.message); return; }
     setNewBook(emptyBook);
     setShowAddBook(false);
   }
@@ -170,11 +164,8 @@ export default function BookClub() {
 
   async function saveEdit() {
     await supabase.from("books").update({
-      title: editForm.title,
-      author: editForm.author,
-      genre: editForm.genre,
-      cover: editForm.cover,
-      description: editForm.description,
+      title: editForm.title, author: editForm.author,
+      genre: editForm.genre, cover: editForm.cover, description: editForm.description,
     }).eq("id", editModal.id);
     setEditModal(null);
   }
@@ -194,21 +185,16 @@ export default function BookClub() {
     setMyComment("");
   }
 
-  // ── Suggestions ──
   async function addSuggestion() {
     if (!newSugg.title.trim() || !newSugg.author.trim()) return;
     if (!currentUser) { alert("Please select your name first!"); return; }
     const { error } = await supabase.from("suggestions").insert({
-      title: newSugg.title.trim(),
-      author: newSugg.author.trim(),
-      genre: newSugg.genre,
-      reason: newSugg.reason.trim(),
-      suggested_by: currentUser,
-      votes: [currentUser],
-      cover: newSugg.cover || null,
-      description: newSugg.description || null,
+      title: newSugg.title.trim(), author: newSugg.author.trim(),
+      genre: newSugg.genre, reason: newSugg.reason.trim(),
+      suggested_by: currentUser, votes: [currentUser],
+      cover: newSugg.cover || null, description: newSugg.description || null,
     });
-    if (error) { alert("Error saving suggestion: " + error.message); return; }
+    if (error) { alert("Error: " + error.message); return; }
     setNewSugg(emptySugg);
     setShowAddSugg(false);
   }
@@ -224,20 +210,16 @@ export default function BookClub() {
     await supabase.from("suggestions").update({ votes: updated }).eq("id", sugg.id);
   }
 
-  // ── Personal books ──
   async function addPersonalBook() {
     if (!newPersonal.title.trim() || !newPersonal.author.trim()) return;
     if (!currentUser) { alert("Please select your name first!"); return; }
     const { error } = await supabase.from("personal_books").insert({
-      title: newPersonal.title.trim(),
-      author: newPersonal.author.trim(),
-      genre: newPersonal.genre,
-      rating: newPersonal.myRating,
-      cover: newPersonal.cover || null,
-      description: newPersonal.description || null,
+      title: newPersonal.title.trim(), author: newPersonal.author.trim(),
+      genre: newPersonal.genre, rating: newPersonal.myRating,
+      cover: newPersonal.cover || null, description: newPersonal.description || null,
       member: currentUser,
     });
-    if (error) { alert("Error saving book: " + error.message); return; }
+    if (error) { alert("Error: " + error.message); return; }
     setNewPersonal(emptyPersonal);
     setShowAddPersonal(false);
   }
@@ -247,25 +229,18 @@ export default function BookClub() {
     await supabase.from("personal_books").delete().eq("id", id);
   }
 
-  // ── AI Recs ──
   async function getAIRecs() {
     setAiLoading(true);
     const bookSummary = books.map(b =>
       `"${b.title}" by ${b.author} (${b.genre}) - avg ${avgRating(b.ratings)||"unrated"}/10${b.description ? `. About: ${b.description.slice(0,120)}` : ""}. Ratings: ${Object.entries(b.ratings||{}).map(([m,r])=>`${m}:${r}`).join(", ")}`
     ).join("\n");
     const suggSummary = suggestions.map(s =>
-      `"${s.title}" by ${s.author} (${s.genre})${s.description ? `. About: ${s.description.slice(0,100)}` : ""}${s.reason ? `. Why: ${s.reason}` : ""} — ${s.votes?.length||0} vote(s)`
+      `"${s.title}" by ${s.author} (${s.genre})${s.reason ? `. Why: ${s.reason}` : ""} — ${s.votes?.length||0} vote(s)`
     ).join("\n");
     const prompt = `You are a book recommendation expert for a book club of ${MEMBERS.length} women: ${MEMBERS.join(", ")}.
-
-BOOKS ALREADY READ:
-${bookSummary || "None yet"}
-
-MEMBER SUGGESTIONS:
-${suggSummary || "None yet"}
-
-Return a ranked list of exactly 10 book recommendations. Prioritise suggestions from members if they fit well.
-
+BOOKS ALREADY READ:\n${bookSummary || "None yet"}
+MEMBER SUGGESTIONS:\n${suggSummary || "None yet"}
+Return a ranked list of exactly 10 book recommendations. Prioritise suggestions if they fit well.
 Respond ONLY with a valid JSON array, no markdown:
 [{"rank":1,"title":"","author":"","genre":"","fromSuggestions":false,"whyThisBook":"2 sentences","matchScore":85}]`;
     try {
@@ -290,341 +265,325 @@ Respond ONLY with a valid JSON array, no markdown:
 
   const sortedBooks = [...books].sort((a,b) => (parseFloat(avgRating(b.ratings))||0)-(parseFloat(avgRating(a.ratings))||0));
   const sortedSuggs = [...suggestions].sort((a,b) => (b.votes?.length||0)-(a.votes?.length||0));
-  const profileBooks = profileMember ? books.filter(b => (b.ratings||{})[profileMember] != null) : [];
-  const profilePersonal = profileMember ? personalBooks.filter(b => b.member === profileMember) : [];
+  const myPersonalBooks = personalBooks.filter(b => b.member === currentUser);
+
+  if (loading) return (
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"'Barlow Condensed',sans-serif",fontSize:52,fontWeight:900,color:"#C8391B",textTransform:"uppercase",letterSpacing:-2,background:"#F5F2EC"}}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@900&display=swap');*{margin:0;padding:0;box-sizing:border-box}`}</style>
+      BOOKED.IN
+    </div>
+  );
 
   const CSS = `
-    @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,700;0,800;0,900;1,700;1,800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;0,900;1,700;1,900&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=DM+Serif+Display:ital@0;1&display=swap');
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-    :root{--red:#E8000D;--yellow:#FFD600;--black:#0A0A0A;--white:#FFFFFF;--off:#F7F6F2;--grey:#E8E6E0;--mid:#999590;--D:'Barlow Condensed',sans-serif;--B:'DM Sans',sans-serif}
-    body{background:var(--white);font-family:var(--B);color:var(--black)}
+    :root{
+      --bg:#F5F2EC;
+      --card:#FDFCF9;
+      --red:#C8391B;
+      --yellow:#F0C93A;
+      --black:#1A1208;
+      --border:#DDD8CE;
+      --mid:#8A8278;
+      --D:'Barlow Condensed',sans-serif;
+      --S:'DM Serif Display',serif;
+      --B:'DM Sans',sans-serif;
+    }
+    body{background:var(--bg);font-family:var(--B);color:var(--black);-webkit-font-smoothing:antialiased}
     .app{min-height:100vh}
 
-    .hdr{background:var(--white);border-bottom:2px solid var(--black);padding:0 28px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:200;gap:16px;flex-wrap:wrap;min-height:60px}
-    .hdr-left{display:flex;align-items:center;gap:12px}
-    .logo{font-family:var(--D);font-size:36px;font-weight:900;text-transform:uppercase;letter-spacing:-1px;color:var(--black);cursor:pointer;line-height:1;padding:12px 0}
+    /* ── HEADER ── */
+    .hdr{
+      background:var(--bg);
+      border-bottom:1.5px solid var(--border);
+      padding:0 32px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      position:sticky;
+      top:0;
+      z-index:200;
+      gap:16px;
+      height:56px;
+    }
+    .logo{font-family:var(--D);font-size:28px;font-weight:900;text-transform:uppercase;letter-spacing:-0.5px;color:var(--black);line-height:1}
     .logo span{color:var(--red)}
-    .live-pill{display:flex;align-items:center;gap:5px;background:var(--yellow);border:1.5px solid var(--black);border-radius:20px;padding:3px 10px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;white-space:nowrap}
-    .live-dot{width:6px;height:6px;background:var(--red);border-radius:50%;animation:pulse 2s infinite}
-    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-
     .hdr-right{display:flex;align-items:center;gap:10px}
-    .user-select-wrap{display:flex;align-items:center;gap:8px}
-    .user-select-label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--mid);white-space:nowrap}
-    .user-dropdown{appearance:none;-webkit-appearance:none;background:var(--white);border:2px solid var(--black);border-radius:6px;padding:7px 32px 7px 12px;font-family:var(--D);font-size:16px;font-weight:800;text-transform:uppercase;letter-spacing:.02em;color:var(--black);cursor:pointer;outline:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%230A0A0A' stroke-width='2' fill='none'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;transition:box-shadow .12s;min-width:130px}
-    .user-dropdown:focus{box-shadow:3px 3px 0 var(--red)}
-    .user-dropdown.unset{color:var(--mid);border-color:var(--red)}
-    .profile-link{background:none;border:1.5px solid var(--grey);border-radius:4px;padding:5px 12px;font-size:12px;font-family:var(--B);font-weight:500;cursor:pointer;color:var(--mid);transition:all .12s;white-space:nowrap}
-    .profile-link:hover{border-color:var(--red);color:var(--red)}
+    .user-label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--mid)}
+    .user-dropdown{
+      appearance:none;-webkit-appearance:none;
+      background:var(--card);
+      border:1.5px solid var(--border);
+      border-radius:6px;
+      padding:6px 28px 6px 10px;
+      font-family:var(--D);
+      font-size:15px;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:.02em;
+      color:var(--black);
+      cursor:pointer;
+      outline:none;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%231A1208' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat:no-repeat;
+      background-position:right 9px center;
+      transition:border-color .12s;
+      min-width:120px;
+    }
+    .user-dropdown:focus{border-color:var(--red)}
+    .user-dropdown.unset{color:var(--mid);border-color:var(--red);border-style:dashed}
 
-    .hero{background:var(--red);padding:24px 28px;display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;border-bottom:2px solid var(--black)}
-    .hero-title{font-family:var(--D);font-size:clamp(44px,9vw,90px);font-weight:900;text-transform:uppercase;letter-spacing:-2px;line-height:.9;color:var(--white)}
+    /* ── SLIM HERO ── */
+    .hero{
+      background:var(--red);
+      padding:14px 32px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:16px;
+      border-bottom:1.5px solid var(--black);
+      flex-wrap:wrap;
+    }
+    .hero-title{
+      font-family:var(--D);
+      font-size:clamp(28px,4vw,44px);
+      font-weight:900;
+      text-transform:uppercase;
+      letter-spacing:-1px;
+      line-height:1;
+      color:#fff;
+    }
     .hero-title em{color:var(--yellow);font-style:italic}
-    .stats-row{display:flex;gap:2px}
-    .stat-box{background:var(--white);border:2px solid var(--black);padding:10px 16px;text-align:center;min-width:72px}
-    .stat-box:first-child{border-radius:4px 0 0 4px}
-    .stat-box:last-child{border-radius:0 4px 4px 0}
-    .stat-n{font-family:var(--D);font-size:30px;font-weight:900;line-height:1;color:var(--red)}
-    .stat-l{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--mid);margin-top:2px}
+    .hero-stats{display:flex;gap:2px}
+    .hstat{background:#fff;padding:8px 14px;text-align:center;min-width:64px}
+    .hstat:first-child{border-radius:4px 0 0 4px}
+    .hstat:last-child{border-radius:0 4px 4px 0}
+    .hstat-n{font-family:var(--D);font-size:24px;font-weight:900;line-height:1;color:var(--red)}
+    .hstat-l{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--mid);margin-top:1px}
 
-    .tabs{display:flex;border-bottom:2px solid var(--black);background:var(--white);padding:0 28px;overflow-x:auto}
-    .tbtn{background:none;border:none;border-bottom:3px solid transparent;margin-bottom:-2px;padding:12px 18px 12px 0;font-family:var(--D);font-size:17px;font-weight:800;text-transform:uppercase;cursor:pointer;color:var(--mid);transition:all .12s;white-space:nowrap;margin-right:6px}
+    /* ── TABS ── */
+    .tabs{
+      display:flex;
+      background:var(--bg);
+      border-bottom:1.5px solid var(--border);
+      padding:0 32px;
+      overflow-x:auto;
+      gap:0;
+    }
+    .tbtn{
+      background:none;border:none;
+      border-bottom:2px solid transparent;
+      margin-bottom:-1.5px;
+      padding:12px 16px 12px 0;
+      font-family:var(--B);
+      font-size:13px;
+      font-weight:600;
+      cursor:pointer;
+      color:var(--mid);
+      transition:all .12s;
+      white-space:nowrap;
+      margin-right:12px;
+      letter-spacing:.01em;
+    }
     .tbtn.on{color:var(--black);border-bottom-color:var(--red)}
     .tbtn:hover:not(.on){color:var(--black)}
 
-    .content{padding:28px;max-width:960px}
-    .section-hdr{display:flex;align-items:baseline;gap:10px;margin-bottom:20px;padding-bottom:12px;border-bottom:1.5px solid var(--grey)}
-    .section-title{font-family:var(--D);font-size:30px;font-weight:900;text-transform:uppercase;letter-spacing:-.5px}
-    .section-count{font-family:var(--D);font-size:16px;font-weight:700;color:var(--mid)}
+    /* ── CONTENT ── */
+    .content{padding:28px 32px;max-width:900px}
 
-    .blist{display:flex;flex-direction:column;gap:3px}
-    .bcard{background:var(--white);border:1.5px solid var(--grey);border-radius:6px;padding:16px 18px;display:flex;gap:14px;align-items:flex-start;transition:border-color .12s,box-shadow .12s}
-    .bcard:hover{border-color:var(--black);box-shadow:4px 4px 0 var(--black)}
-    .bcover{width:52px;height:72px;object-fit:cover;border-radius:3px;border:1px solid var(--grey);flex-shrink:0;background:var(--off)}
-    .bcover-ph{width:52px;height:72px;background:var(--grey);border-radius:3px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:22px}
-    .brank{font-family:var(--D);font-size:24px;font-weight:900;color:var(--grey);min-width:30px;line-height:1;padding-top:2px;flex-shrink:0}
-    .brank.top{color:var(--yellow);-webkit-text-stroke:1.5px var(--black)}
+    .section-hdr{display:flex;align-items:baseline;gap:10px;margin-bottom:20px}
+    .section-title{font-family:var(--S);font-size:26px;font-weight:400;font-style:italic;letter-spacing:-.3px}
+    .section-count{font-size:13px;color:var(--mid);font-family:var(--B)}
+
+    /* ── BOOK CARDS ── */
+    .blist{display:flex;flex-direction:column;gap:2px}
+    .bcard{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:8px;
+      padding:14px 16px;
+      display:flex;
+      gap:14px;
+      align-items:flex-start;
+      transition:border-color .15s, box-shadow .15s;
+    }
+    .bcard:hover{border-color:var(--black);box-shadow:0 2px 12px rgba(26,18,8,.08)}
+    .bcover{width:48px;height:68px;object-fit:cover;border-radius:4px;border:1px solid var(--border);flex-shrink:0;background:var(--bg)}
+    .bcover-ph{width:48px;height:68px;background:var(--border);border-radius:4px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--mid)}
+    .brank{font-family:var(--D);font-size:18px;font-weight:700;color:var(--border);min-width:26px;line-height:1;padding-top:4px;flex-shrink:0}
+    .brank.top{color:var(--yellow);-webkit-text-stroke:1px #b8860b}
     .binfo{flex:1;min-width:0}
-    .btitle{font-family:var(--D);font-size:20px;font-weight:800;text-transform:uppercase;letter-spacing:-.2px;line-height:1.1}
+    .btitle{font-family:var(--D);font-size:18px;font-weight:800;text-transform:uppercase;letter-spacing:-.1px;line-height:1.1}
     .bauthor{font-size:12px;color:var(--mid);margin-top:2px;font-style:italic}
-    .bgenre{display:inline-block;background:var(--yellow);border:1.5px solid var(--black);border-radius:3px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:2px 7px;margin-top:6px}
-    .bratings{display:flex;gap:4px;margin-top:8px;flex-wrap:wrap}
-    .mrat{font-size:11px;background:var(--off);border:1px solid var(--grey);border-radius:3px;padding:2px 7px;display:flex;align-items:center;gap:3px}
+    .bgenre{display:inline-block;background:var(--yellow);border-radius:3px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:2px 6px;margin-top:5px;color:var(--black)}
+    .bratings{display:flex;gap:3px;margin-top:8px;flex-wrap:wrap}
+    .mrat{font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:2px 6px;display:flex;align-items:center;gap:3px}
     .mrat.unrated{opacity:.3}
     .mrat .who2{color:var(--mid);font-size:10px}
-    .mrat .sc{font-weight:700;color:var(--red)}
-    .bcomments{margin-top:8px;display:flex;flex-direction:column;gap:4px}
-    .bcomment{font-size:12px;background:var(--off);border-left:3px solid var(--yellow);padding:5px 8px;border-radius:0 3px 3px 0}
-    .bcomment strong{color:var(--black);margin-right:4px;font-family:var(--D);font-size:13px;text-transform:uppercase}
-    .bcomment span{color:var(--mid);font-style:italic}
+    .mrat .sc{font-weight:600;color:var(--red)}
+    .bcomments{margin-top:8px;display:flex;flex-direction:column;gap:3px}
+    .bcomment{font-size:12px;background:var(--bg);border-left:2px solid var(--yellow);padding:4px 8px;border-radius:0 3px 3px 0;color:var(--mid)}
+    .bcomment strong{color:var(--black);margin-right:4px;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+    .addedbylbl{font-size:10px;color:var(--border);margin-top:3px}
     .bright{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
-    .avgscore{font-family:var(--D);font-size:38px;font-weight:900;line-height:1;color:var(--black)}
+    .avgscore{font-family:var(--D);font-size:34px;font-weight:900;line-height:1;color:var(--black)}
     .avglbl{font-size:9px;color:var(--mid);text-transform:uppercase;letter-spacing:.08em;text-align:right}
-    .addedbylbl{font-size:10px;color:var(--mid);margin-top:2px}
-    .btn-row{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;margin-top:4px}
-    .ratebtn{background:var(--yellow);border:1.5px solid var(--black);border-radius:4px;padding:4px 10px;font-size:11px;font-weight:700;font-family:var(--B);text-transform:uppercase;cursor:pointer;transition:all .12s}
-    .ratebtn:hover{background:var(--black);color:var(--yellow)}
-    .commentbtn{background:var(--off);border:1.5px solid var(--grey);border-radius:4px;padding:4px 10px;font-size:11px;font-weight:600;font-family:var(--B);cursor:pointer;transition:all .12s}
-    .commentbtn:hover{border-color:var(--black)}
-    .editbtn{background:none;border:1.5px solid var(--grey);border-radius:4px;padding:4px 8px;font-size:11px;font-family:var(--B);cursor:pointer;transition:all .12s}
-    .editbtn:hover{border-color:var(--black)}
-    .delbtn{background:none;border:1.5px solid var(--grey);border-radius:4px;padding:4px 8px;font-size:11px;font-family:var(--B);cursor:pointer;color:var(--mid);transition:all .12s}
+    .btn-row{display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end;margin-top:4px}
+    .ratebtn{background:var(--red);color:#fff;border:none;border-radius:4px;padding:4px 10px;font-size:11px;font-weight:600;font-family:var(--B);cursor:pointer;transition:all .12s}
+    .ratebtn:hover{background:var(--black)}
+    .commentbtn{background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:4px 10px;font-size:11px;font-family:var(--B);cursor:pointer;transition:all .12s;color:var(--mid)}
+    .commentbtn:hover{border-color:var(--black);color:var(--black)}
+    .iconbtn{background:none;border:1px solid var(--border);border-radius:4px;padding:4px 7px;font-size:11px;cursor:pointer;transition:all .12s;color:var(--mid)}
+    .iconbtn:hover{border-color:var(--black);color:var(--black)}
+    .delbtn{background:none;border:1px solid var(--border);border-radius:4px;padding:4px 7px;font-size:11px;cursor:pointer;color:var(--mid);transition:all .12s}
     .delbtn:hover{border-color:var(--red);color:var(--red)}
 
-    .star-row{display:flex;align-items:center;gap:2px;flex-wrap:wrap}
-    .star{background:none;border:none;cursor:pointer;color:var(--grey);padding:0;transition:color .1s;line-height:1}
-    .star.filled{color:var(--yellow);-webkit-text-stroke:.5px #b89a00}
+    /* ── STARS ── */
+    .star-row{display:flex;align-items:center;gap:1px;flex-wrap:wrap}
+    .star{background:none;border:none;cursor:pointer;color:var(--border);padding:0;transition:color .1s;line-height:1}
+    .star.filled{color:var(--yellow)}
     .star.readonly{cursor:default}
-    .star-label{font-size:14px;font-weight:700;margin-left:6px;color:var(--red);font-family:var(--D)}
+    .star-label{font-size:13px;font-weight:600;margin-left:6px;color:var(--red);font-family:var(--D)}
 
-    .slist{display:flex;flex-direction:column;gap:3px}
-    .scard{background:var(--white);border:1.5px solid var(--grey);border-radius:6px;padding:14px 16px;display:flex;align-items:flex-start;gap:12px;transition:border-color .12s,box-shadow .12s}
-    .scard:hover{border-color:var(--black);box-shadow:4px 4px 0 var(--black)}
+    /* ── SUGGESTIONS ── */
+    .slist{display:flex;flex-direction:column;gap:2px}
+    .scard{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px 16px;display:flex;align-items:flex-start;gap:12px;transition:border-color .15s,box-shadow .15s}
+    .scard:hover{border-color:var(--black);box-shadow:0 2px 12px rgba(26,18,8,.08)}
     .sinfo{flex:1;min-width:0}
-    .stitle{font-family:var(--D);font-size:19px;font-weight:800;text-transform:uppercase;letter-spacing:-.2px}
+    .stitle{font-family:var(--D);font-size:17px;font-weight:800;text-transform:uppercase;letter-spacing:-.1px}
     .sauthor{font-size:12px;color:var(--mid);font-style:italic;margin-top:1px}
     .smeta{font-size:10px;color:var(--mid);margin-top:3px;text-transform:uppercase;letter-spacing:.05em}
-    .sreason{font-size:12px;color:var(--black);margin-top:6px;font-style:italic;padding-left:8px;border-left:3px solid var(--yellow)}
+    .sreason{font-size:12px;color:var(--black);margin-top:6px;padding-left:8px;border-left:2px solid var(--yellow);font-style:italic;color:var(--mid)}
     .voters{font-size:11px;color:var(--mid);margin-top:4px}
-    .vbtn{display:flex;flex-direction:column;align-items:center;gap:1px;background:var(--white);border:1.5px solid var(--grey);border-radius:6px;padding:8px 12px;cursor:pointer;font-family:var(--B);transition:all .12s;min-width:50px;flex-shrink:0}
-    .vbtn.on{background:var(--red);border-color:var(--red);color:var(--white)}
-    .vbtn:hover:not(.on){border-color:var(--black);box-shadow:3px 3px 0 var(--black)}
-    .vcnt{font-family:var(--D);font-size:20px;font-weight:900;line-height:1}
+    .vbtn{display:flex;flex-direction:column;align-items:center;gap:1px;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:7px 11px;cursor:pointer;font-family:var(--B);transition:all .12s;min-width:46px;flex-shrink:0}
+    .vbtn.on{background:var(--red);border-color:var(--red);color:#fff}
+    .vbtn:hover:not(.on){border-color:var(--black)}
+    .vcnt{font-family:var(--D);font-size:18px;font-weight:900;line-height:1}
     .vlbl{font-size:9px;text-transform:uppercase;letter-spacing:.07em}
 
-    .ai-intro{font-size:13px;color:var(--mid);margin-bottom:18px;line-height:1.6;max-width:520px}
-    .aibtn{width:100%;max-width:480px;padding:15px 22px;background:var(--red);color:var(--white);border:2px solid var(--black);border-radius:6px;font-family:var(--D);font-size:20px;font-weight:900;text-transform:uppercase;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:4px 4px 0 var(--black)}
-    .aibtn:hover{background:var(--black);box-shadow:6px 6px 0 var(--red)}
-    .aibtn:disabled{opacity:.6;cursor:not-allowed;box-shadow:none}
-    .ai-view-only{background:var(--off);border:1.5px solid var(--grey);border-radius:6px;padding:14px 18px;font-size:13px;color:var(--mid);margin-bottom:18px;max-width:480px}
+    /* ── PERSONAL ── */
+    .personal-grid{display:flex;flex-direction:column;gap:2px}
+    .personal-who{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px}
+    .pwho-btn{background:none;border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:12px;font-family:var(--B);font-weight:500;cursor:pointer;color:var(--mid);transition:all .12s}
+    .pwho-btn.on{background:var(--black);color:#fff;border-color:var(--black)}
+    .pwho-btn:hover:not(.on){border-color:var(--black);color:var(--black)}
+    .personal-empty{text-align:center;padding:32px;color:var(--mid);font-size:13px;font-style:italic}
+
+    /* ── AI ── */
+    .ai-intro{font-size:13px;color:var(--mid);margin-bottom:18px;line-height:1.6;max-width:500px}
+    .aibtn{padding:12px 24px;background:var(--red);color:#fff;border:none;border-radius:6px;font-family:var(--D);font-size:18px;font-weight:900;text-transform:uppercase;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:8px;letter-spacing:.02em}
+    .aibtn:hover{background:var(--black)}
+    .aibtn:disabled{opacity:.5;cursor:not-allowed}
+    .ai-view-only{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:12px 16px;font-size:13px;color:var(--mid);margin-bottom:18px;max-width:480px}
     .ai-view-only strong{color:var(--black)}
-    .recs-list{display:flex;flex-direction:column;gap:3px;margin-top:20px;max-width:700px}
-    .rec-card{background:var(--black);color:var(--white);border-radius:6px;border:2px solid var(--black);overflow:hidden;display:flex;transition:box-shadow .12s}
-    .rec-card:hover{box-shadow:4px 4px 0 var(--red)}
-    .rec-rank-col{background:var(--red);padding:14px 14px;display:flex;align-items:center;justify-content:center;min-width:52px;flex-shrink:0}
-    .rec-rank-num{font-family:var(--D);font-size:30px;font-weight:900;color:var(--white);line-height:1}
+    .recs-list{display:flex;flex-direction:column;gap:2px;margin-top:20px;max-width:680px}
+    .rec-card{background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden;display:flex;transition:border-color .15s,box-shadow .15s}
+    .rec-card:hover{border-color:var(--black);box-shadow:0 2px 12px rgba(26,18,8,.08)}
+    .rec-rank-col{background:var(--red);padding:12px 14px;display:flex;align-items:center;justify-content:center;min-width:48px;flex-shrink:0}
+    .rec-rank-num{font-family:var(--D);font-size:26px;font-weight:900;color:#fff;line-height:1}
     .rec-rank-num.gold{color:var(--yellow)}
     .rec-cover{width:54px;height:78px;object-fit:cover;flex-shrink:0}
-    .rec-cover-ph{width:54px;height:78px;background:#222;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:22px}
-    .rec-body{padding:12px 16px;flex:1;min-width:0}
-    .rec-title{font-family:var(--D);font-size:19px;font-weight:900;text-transform:uppercase;letter-spacing:-.3px;color:var(--yellow);line-height:1.1}
-    .rec-author{font-size:12px;color:rgba(255,255,255,.5);font-style:italic;margin-top:3px}
-    .rec-why{font-size:12px;line-height:1.6;margin-top:7px;color:rgba(255,255,255,.75)}
-    .rec-match{display:inline-block;background:var(--yellow);color:var(--black);font-family:var(--D);font-size:13px;font-weight:900;border-radius:3px;padding:2px 9px;margin-top:7px}
-    .rec-from{display:inline-block;background:rgba(255,255,255,.15);font-size:10px;border-radius:3px;padding:2px 7px;margin-left:6px;text-transform:uppercase;letter-spacing:.05em}
-    .no-recs{text-align:center;padding:32px;color:var(--mid);font-size:13px;font-style:italic;max-width:480px}
+    .rec-cover-ph{width:54px;height:78px;background:var(--bg);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--mid)}
+    .rec-body{padding:12px 14px;flex:1;min-width:0}
+    .rec-title{font-family:var(--D);font-size:17px;font-weight:800;text-transform:uppercase;letter-spacing:-.1px;color:var(--black);line-height:1.1}
+    .rec-author{font-size:11px;color:var(--mid);font-style:italic;margin-top:3px}
+    .rec-why{font-size:12px;line-height:1.6;margin-top:6px;color:var(--mid)}
+    .rec-footer{display:flex;align-items:center;gap:8px;margin-top:7px}
+    .rec-match{display:inline-block;background:var(--yellow);color:var(--black);font-family:var(--D);font-size:12px;font-weight:700;border-radius:3px;padding:2px 8px}
+    .rec-from{display:inline-block;background:var(--bg);border:1px solid var(--border);font-size:10px;border-radius:3px;padding:2px 7px;text-transform:uppercase;letter-spacing:.05em;color:var(--mid)}
+    .no-recs{padding:32px 0;color:var(--mid);font-size:13px;font-style:italic}
 
-    .profile-hero{background:var(--black);padding:24px 28px;border-bottom:2px solid var(--black);display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
-    .profile-name{font-family:var(--D);font-size:clamp(40px,8vw,80px);font-weight:900;text-transform:uppercase;letter-spacing:-2px;line-height:.9;color:var(--white)}
-    .profile-name em{color:var(--yellow);font-style:italic}
-    .profile-stats{display:flex;gap:2px}
-    .pstat{background:var(--white);border:2px solid var(--black);padding:10px 14px;text-align:center;min-width:68px}
-    .pstat:first-child{border-radius:4px 0 0 4px}
-    .pstat:last-child{border-radius:0 4px 4px 0}
-    .pstat .n{font-family:var(--D);font-size:26px;font-weight:900;line-height:1;color:var(--black)}
-    .pstat .l{font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--mid);margin-top:2px}
-    .back-btn{background:var(--white);border:1.5px solid var(--black);border-radius:4px;padding:7px 16px;font-family:var(--D);font-size:14px;font-weight:800;text-transform:uppercase;cursor:pointer;transition:all .12s;margin-bottom:20px;display:inline-block}
-    .back-btn:hover{background:var(--red);color:var(--white);border-color:var(--red)}
-    .psection-title{font-family:var(--D);font-size:22px;font-weight:900;text-transform:uppercase;margin:20px 0 12px;padding-bottom:8px;border-bottom:1.5px solid var(--grey)}
-
-    .addbtn{display:flex;align-items:center;gap:7px;background:none;border:1.5px dashed var(--grey);border-radius:6px;padding:12px 16px;width:100%;cursor:pointer;color:var(--mid);font-family:var(--B);font-size:13px;font-weight:500;transition:all .12s;margin-top:10px;text-transform:uppercase;letter-spacing:.05em}
-    .addbtn:hover{border-color:var(--black);color:var(--black);background:var(--off)}
-    .aform{background:var(--off);border:1.5px solid var(--black);border-radius:6px;padding:18px;margin-top:10px;display:flex;flex-direction:column;gap:12px;box-shadow:4px 4px 0 var(--black)}
+    /* ── FORMS ── */
+    .addbtn{display:flex;align-items:center;gap:7px;background:none;border:1px dashed var(--border);border-radius:6px;padding:11px 16px;width:100%;cursor:pointer;color:var(--mid);font-family:var(--B);font-size:13px;transition:all .12s;margin-top:10px}
+    .addbtn:hover{border-color:var(--black);color:var(--black);background:var(--card)}
+    .aform{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:18px;margin-top:10px;display:flex;flex-direction:column;gap:12px;box-shadow:0 2px 12px rgba(26,18,8,.06)}
     .frow{display:flex;gap:10px;flex-wrap:wrap}
-    .fgrp{display:flex;flex-direction:column;gap:3px;flex:1;min-width:140px}
-    .fgrp label{font-size:10px;text-transform:uppercase;letter-spacing:.1em;font-weight:700;color:var(--mid)}
-    .fgrp input,.fgrp select,.fgrp textarea{padding:8px 10px;border:1.5px solid var(--black);border-radius:4px;background:var(--white);font-family:var(--B);font-size:13px;color:var(--black);outline:none;transition:box-shadow .12s;width:100%}
+    .fgrp{display:flex;flex-direction:column;gap:4px;flex:1;min-width:140px}
+    .fgrp label{font-size:10px;text-transform:uppercase;letter-spacing:.1em;font-weight:600;color:var(--mid)}
+    .fgrp input,.fgrp select,.fgrp textarea{padding:8px 10px;border:1px solid var(--border);border-radius:5px;background:#fff;font-family:var(--B);font-size:13px;color:var(--black);outline:none;transition:border-color .12s;width:100%}
     .fgrp textarea{resize:vertical;min-height:65px}
-    .fgrp input:focus,.fgrp select:focus,.fgrp textarea:focus{box-shadow:3px 3px 0 var(--black)}
-    .factions{display:flex;gap:7px}
-    .bprimary{background:var(--black);color:var(--white);border:1.5px solid var(--black);border-radius:4px;padding:9px 18px;font-family:var(--B);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;cursor:pointer;transition:all .12s}
-    .bprimary:hover{background:var(--red);border-color:var(--red)}
-    .bcancel{background:none;border:1.5px solid var(--grey);border-radius:4px;color:var(--mid);padding:9px 14px;font-family:var(--B);font-size:12px;cursor:pointer;transition:all .12s}
+    .fgrp input:focus,.fgrp select:focus,.fgrp textarea:focus{border-color:var(--red)}
+    .factions{display:flex;gap:7px;margin-top:2px}
+    .bprimary{background:var(--black);color:#fff;border:none;border-radius:5px;padding:9px 18px;font-family:var(--B);font-size:12px;font-weight:600;cursor:pointer;transition:all .12s}
+    .bprimary:hover{background:var(--red)}
+    .bcancel{background:none;border:1px solid var(--border);border-radius:5px;color:var(--mid);padding:9px 14px;font-family:var(--B);font-size:12px;cursor:pointer;transition:all .12s}
     .bcancel:hover{border-color:var(--black);color:var(--black)}
-    .rlbl{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--mid);margin-bottom:7px;font-weight:700}
-    .selected-cover{display:flex;align-items:center;gap:10px;padding:8px;background:var(--white);border:1px solid var(--grey);border-radius:4px}
-    .selected-cover img{width:34px;height:48px;object-fit:cover;border-radius:2px}
+    .rlbl{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--mid);margin-bottom:7px;font-weight:600}
+    .selected-cover{display:flex;align-items:center;gap:10px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:5px}
+    .selected-cover img{width:32px;height:46px;object-fit:cover;border-radius:3px}
     .selected-cover span{font-size:12px;color:var(--mid);font-style:italic}
 
-    .search-input{padding:8px 10px;border:1.5px solid var(--black);border-radius:4px;background:var(--white);font-family:var(--B);font-size:13px;color:var(--black);outline:none;width:100%;transition:box-shadow .12s}
-    .search-input:focus{box-shadow:3px 3px 0 var(--black)}
+    /* ── SEARCH ── */
+    .search-input{padding:8px 10px;border:1px solid var(--border);border-radius:5px;background:#fff;font-family:var(--B);font-size:13px;color:var(--black);outline:none;width:100%;transition:border-color .12s}
+    .search-input:focus{border-color:var(--red)}
     .search-loading{font-size:12px;color:var(--mid);padding:5px 0;font-style:italic}
-    .search-dropdown{position:absolute;top:100%;left:0;right:0;background:var(--white);border:1.5px solid var(--black);border-top:none;border-radius:0 0 6px 6px;z-index:300;box-shadow:4px 4px 0 var(--black);max-height:260px;overflow-y:auto}
-    .search-result{display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;transition:background .1s;border-bottom:1px solid var(--grey)}
+    .search-dropdown{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--black);border-top:none;border-radius:0 0 6px 6px;z-index:300;box-shadow:0 8px 24px rgba(26,18,8,.12);max-height:260px;overflow-y:auto}
+    .search-result{display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;transition:background .1s;border-bottom:1px solid var(--border)}
     .search-result:last-child{border-bottom:none}
-    .search-result:hover{background:var(--off)}
-    .search-cover{width:30px;height:44px;object-fit:cover;border-radius:2px;flex-shrink:0}
-    .search-result-title{font-family:var(--D);font-size:15px;font-weight:800;text-transform:uppercase}
+    .search-result:hover{background:var(--bg)}
+    .search-cover{width:28px;height:40px;object-fit:cover;border-radius:2px;flex-shrink:0}
+    .search-cover-ph{width:28px;height:40px;background:var(--border);border-radius:2px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px}
+    .search-result-title{font-family:var(--D);font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:-.1px}
     .search-result-author{font-size:11px;color:var(--mid);font-style:italic;margin-top:1px}
 
-    .overlay{position:fixed;inset:0;background:rgba(10,10,10,.65);z-index:400;display:flex;align-items:center;justify-content:center;padding:16px}
-    .modal{background:var(--white);border-radius:8px;border:2px solid var(--black);padding:24px;max-width:460px;width:100%;box-shadow:8px 8px 0 var(--black);max-height:90vh;overflow-y:auto}
-    .modal h3{font-family:var(--D);font-size:22px;font-weight:900;text-transform:uppercase;margin-bottom:4px}
-    .modal p{font-size:12px;color:var(--mid);margin-bottom:14px;font-style:italic}
-    .modal-textarea{padding:8px 10px;border:1.5px solid var(--black);border-radius:4px;font-family:var(--B);font-size:13px;outline:none;resize:vertical;width:100%;min-height:80px;transition:box-shadow .12s}
-    .modal-textarea:focus{box-shadow:3px 3px 0 var(--black)}
+    /* ── MODAL ── */
+    .overlay{position:fixed;inset:0;background:rgba(26,18,8,.5);z-index:400;display:flex;align-items:center;justify-content:center;padding:16px}
+    .modal{background:#fff;border-radius:10px;border:1px solid var(--border);padding:24px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(26,18,8,.2);max-height:90vh;overflow-y:auto}
+    .modal h3{font-family:var(--S);font-size:20px;font-weight:400;font-style:italic;margin-bottom:3px}
+    .modal p{font-size:12px;color:var(--mid);margin-bottom:14px}
+    .modal-textarea{padding:8px 10px;border:1px solid var(--border);border-radius:5px;font-family:var(--B);font-size:13px;outline:none;resize:vertical;width:100%;min-height:80px;transition:border-color .12s}
+    .modal-textarea:focus{border-color:var(--red)}
 
     .empty{text-align:center;padding:40px 28px;color:var(--mid)}
-    .empty-title{font-family:var(--D);font-size:26px;font-weight:900;text-transform:uppercase;color:var(--grey)}
-    .empty-sub{font-size:13px;margin-top:5px}
-    .aierr{margin-top:14px;padding:14px;background:var(--off);border:1.5px solid var(--grey);border-radius:6px;color:var(--red);font-size:13px}
-    .need-name{background:var(--yellow);border:1.5px solid var(--black);border-radius:6px;padding:10px 16px;font-size:13px;font-weight:600;margin-bottom:12px}
+    .empty-title{font-family:var(--S);font-size:22px;font-style:italic;color:var(--border)}
+    .empty-sub{font-size:13px;margin-top:4px}
+    .need-name{background:var(--yellow);border-radius:5px;padding:9px 14px;font-size:13px;font-weight:500;margin-bottom:12px;color:var(--black)}
+    .aierr{margin-top:14px;padding:14px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--red);font-size:13px}
 
-    @media(max-width:680px){
-      .hdr{padding:10px 14px;gap:8px}
-      .hero{padding:18px 14px}
-      .tabs{padding:0 14px}
-      .content{padding:16px 14px}
+    @media(max-width:640px){
+      .hdr{padding:0 16px}
+      .hero{padding:12px 16px}
+      .tabs{padding:0 16px}
+      .content{padding:20px 16px}
       .bcard{flex-wrap:wrap}
       .bright{flex-direction:row;align-items:center;width:100%}
-      .hdr-right{width:100%}
     }
   `;
 
-  // ── PROFILE VIEW ──
-  if (profileMember) {
-    const myAvg = profileBooks.length
-      ? (profileBooks.reduce((s,b) => s + ((b.ratings||{})[profileMember]||0), 0) / profileBooks.length).toFixed(1)
-      : "—";
-    return (
-      <div className="app">
-        <style>{CSS}</style>
-        <div className="hdr">
-          <div className="hdr-left">
-            <div className="logo" onClick={()=>setProfileMember(null)}>BOOKED<span>.</span>IN</div>
-          </div>
-          <div className="hdr-right">
-            <div className="user-select-wrap">
-              <span className="user-select-label">You are:</span>
-              <select className={`user-dropdown ${!currentUser?"unset":""}`} value={currentUser} onChange={e=>setCurrentUser(e.target.value)}>
-                <option value="">Select your name…</option>
-                {MEMBERS.map(m=><option key={m} value={m}>{m}</option>)}
-              </select>
-            </div>
-          </div>
-        </div>
-        <div className="profile-hero">
-          <div className="profile-name"><em>{profileMember}</em>'s<br/>Books</div>
-          <div className="profile-stats">
-            <div className="pstat"><div className="n">{profileBooks.length}</div><div className="l">Club</div></div>
-            <div className="pstat"><div className="n">{profilePersonal.length}</div><div className="l">Personal</div></div>
-            <div className="pstat"><div className="n">{myAvg}</div><div className="l">Avg</div></div>
-          </div>
-        </div>
-        <div className="content">
-          <button className="back-btn" onClick={()=>setProfileMember(null)}>← Back</button>
-          <div className="psection-title">Book Club Ratings</div>
-          {profileBooks.length===0 && <div className="empty"><div className="empty-title">No ratings yet</div></div>}
-          <div className="blist">
-            {profileBooks.sort((a,b)=>((b.ratings||{})[profileMember]||0)-((a.ratings||{})[profileMember]||0)).map(book=>(
-              <div key={book.id} className="bcard">
-                {book.cover?<img src={book.cover} alt="" className="bcover"/>:<div className="bcover-ph">📖</div>}
-                <div className="binfo">
-                  <div className="btitle">{book.title}</div>
-                  <div className="bauthor">{book.author}</div>
-                  <span className="bgenre">{book.genre}</span>
-                  {(book.comments||{})[profileMember] && (
-                    <div className="bcomments"><div className="bcomment"><span>{(book.comments||{})[profileMember]}</span></div></div>
-                  )}
-                </div>
-                <div className="bright">
-                  <div className="avgscore" style={{fontSize:30}}>{(book.ratings||{})[profileMember]||"—"}</div>
-                  <div className="avglbl">/ 10</div>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="psection-title">Personal Reading List</div>
-          {profilePersonal.length===0 && <div className="empty"><div className="empty-title">Nothing added yet</div></div>}
-          <div className="blist">
-            {profilePersonal.map(book=>(
-              <div key={book.id} className="bcard">
-                {book.cover?<img src={book.cover} alt="" className="bcover"/>:<div className="bcover-ph">📚</div>}
-                <div className="binfo">
-                  <div className="btitle">{book.title}</div>
-                  <div className="bauthor">{book.author}</div>
-                  <span className="bgenre">{book.genre}</span>
-                </div>
-                <div className="bright">
-                  <div className="avgscore" style={{fontSize:30}}>{book.rating||"—"}</div>
-                  <div className="avglbl">/ 10</div>
-                  {book.member===currentUser && <button className="delbtn" onClick={()=>deletePersonalBook(book.id)}>✕</button>}
-                </div>
-              </div>
-            ))}
-          </div>
-          {profileMember===currentUser && (
-            showAddPersonal?(
-              <div className="aform">
-                <div className="fgrp" style={{position:"relative"}}>
-                  <label>Search for a book</label>
-                  <BookSearchInput onSelect={b=>setNewPersonal(p=>({...p,title:b.title,author:b.author,genre:b.genre,cover:b.cover,description:b.description}))}/>
-                </div>
-                {newPersonal.cover && <div className="selected-cover"><img src={newPersonal.cover} alt=""/><span>{newPersonal.title}</span></div>}
-                <div className="frow">
-                  <div className="fgrp"><label>Title</label><input value={newPersonal.title} onChange={e=>setNewPersonal(p=>({...p,title:e.target.value}))} placeholder="Book title"/></div>
-                  <div className="fgrp"><label>Author</label><input value={newPersonal.author} onChange={e=>setNewPersonal(p=>({...p,author:e.target.value}))} placeholder="Author"/></div>
-                </div>
-                <div className="frow">
-                  <div className="fgrp"><label>Genre</label><select value={newPersonal.genre} onChange={e=>setNewPersonal(p=>({...p,genre:e.target.value}))}>{GENRES.map(g=><option key={g}>{g}</option>)}</select></div>
-                </div>
-                <div><div className="rlbl">Your Rating</div><StarRating value={newPersonal.myRating} onChange={v=>setNewPersonal(p=>({...p,myRating:v}))}/></div>
-                <div className="factions">
-                  <button className="bprimary" onClick={addPersonalBook}>Add</button>
-                  <button className="bcancel" onClick={()=>setShowAddPersonal(false)}>Cancel</button>
-                </div>
-              </div>
-            ):(
-              <button className="addbtn" onClick={()=>setShowAddPersonal(true)}>＋ Add to my personal reading list</button>
-            )
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // ── MAIN VIEW ──
   return (
     <div className="app">
       <style>{CSS}</style>
 
+      {/* ── HEADER ── */}
       <div className="hdr">
-        <div className="hdr-left">
-          <div className="logo">BOOKED<span>.</span>IN</div>
-          <div className="live-pill"><span className="live-dot"/>{MEMBERS.length} members</div>
-        </div>
+        <div className="logo">BOOKED<span>.</span>IN</div>
         <div className="hdr-right">
-          <div className="user-select-wrap">
-            <span className="user-select-label">Who are you?</span>
-            <select className={`user-dropdown ${!currentUser?"unset":""}`} value={currentUser} onChange={e=>setCurrentUser(e.target.value)}>
-              <option value="">Select your name…</option>
-              {MEMBERS.map(m=><option key={m} value={m}>{m}</option>)}
-            </select>
-          </div>
-          {currentUser && (
-            <button className="profile-link" onClick={()=>setProfileMember(currentUser)}>My Profile →</button>
-          )}
+          <span className="user-label">Who are you?</span>
+          <select className={`user-dropdown ${!currentUser?"unset":""}`} value={currentUser} onChange={e=>setCurrentUser(e.target.value)}>
+            <option value="">Select name…</option>
+            {MEMBERS.map(m=><option key={m} value={m}>{m}</option>)}
+          </select>
         </div>
       </div>
 
+      {/* ── SLIM HERO ── */}
       <div className="hero">
         <div className="hero-title">
-          {tab==="library"&&<><em>Our</em><br/>Reading List</>}
-          {tab==="suggestions"&&<>What&apos;s<br/><em>Next?</em></>}
-          {tab==="recommend"&&<>AI<br/><em>Top 10</em></>}
+          {tab==="library"&&<><em>Our</em> Reading List</>}
+          {tab==="suggestions"&&<>What&apos;s <em>Next?</em></>}
+          {tab==="recommend"&&<>AI <em>Top 10</em></>}
+          {tab==="personal"&&<><em>My</em> Books</>}
         </div>
-        <div className="stats-row">
-          <div className="stat-box"><div className="stat-n">{books.length}</div><div className="stat-l">Read</div></div>
-          <div className="stat-box">
-            <div className="stat-n">{books.length?(books.reduce((s,b)=>s+(parseFloat(avgRating(b.ratings))||0),0)/books.length).toFixed(1):"—"}</div>
-            <div className="stat-l">Avg</div>
-          </div>
-          <div className="stat-box"><div className="stat-n">{suggestions.length}</div><div className="stat-l">Ideas</div></div>
+        <div className="hero-stats">
+          <div className="hstat"><div className="hstat-n">{books.length}</div><div className="hstat-l">Read</div></div>
+          <div className="hstat"><div className="hstat-n">{books.length?(books.reduce((s,b)=>s+(parseFloat(avgRating(b.ratings))||0),0)/books.length).toFixed(1):"—"}</div><div className="hstat-l">Avg</div></div>
+          <div className="hstat"><div className="hstat-n">{suggestions.length}</div><div className="hstat-l">Ideas</div></div>
         </div>
       </div>
 
+      {/* ── TABS ── */}
       <div className="tabs">
-        {[["library","📚 Library"],["suggestions","💡 Suggestions"],["recommend","✨ AI Top 10"]].map(([id,lbl])=>(
+        {[["library","📚 Library"],["suggestions","💡 Suggestions"],["recommend","✨ AI Top 10"],["personal","👤 My Books"]].map(([id,lbl])=>(
           <button key={id} className={`tbtn ${tab===id?"on":""}`} onClick={()=>setTab(id)}>{lbl}</button>
         ))}
       </div>
@@ -635,10 +594,10 @@ Respond ONLY with a valid JSON array, no markdown:
         {tab==="library"&&(
           <div>
             <div className="section-hdr">
-              <div className="section-title">Books Read</div>
-              <div className="section-count">{books.length}</div>
+              <div className="section-title">Books we've read</div>
+              <div className="section-count">{books.length} books</div>
             </div>
-            {sortedBooks.length===0&&<div className="empty"><div className="empty-title">No Books Yet</div><div className="empty-sub">Add your first below</div></div>}
+            {sortedBooks.length===0&&<div className="empty"><div className="empty-title">Nothing here yet</div><div className="empty-sub">Add your first book below</div></div>}
             <div className="blist">
               {sortedBooks.map((book,i)=>(
                 <div key={book.id} className="bcard">
@@ -659,7 +618,7 @@ Respond ONLY with a valid JSON array, no markdown:
                     {Object.entries(book.comments||{}).length>0&&(
                       <div className="bcomments">
                         {Object.entries(book.comments||{}).map(([m,c])=>(
-                          <div key={m} className="bcomment"><strong>{m}</strong><span>{c}</span></div>
+                          <div key={m} className="bcomment"><strong>{m}</strong>{c}</div>
                         ))}
                       </div>
                     )}
@@ -673,10 +632,10 @@ Respond ONLY with a valid JSON array, no markdown:
                       )}
                       {currentUser&&(
                         <button className="commentbtn" onClick={()=>{setCommentModal(book);setMyComment((book.comments||{})[currentUser]||"")}}>
-                          {(book.comments||{})[currentUser]?"Edit note":"Add note"}
+                          {(book.comments||{})[currentUser]?"Edit note":"Note"}
                         </button>
                       )}
-                      <button className="editbtn" onClick={()=>{setEditModal(book);setEditForm({title:book.title,author:book.author,genre:book.genre,cover:book.cover,description:book.description})}}>✏️</button>
+                      <button className="iconbtn" onClick={()=>{setEditModal(book);setEditForm({title:book.title,author:book.author,genre:book.genre,cover:book.cover,description:book.description})}}>✏️</button>
                       <button className="delbtn" onClick={()=>deleteBook(book.id)}>✕</button>
                     </div>
                   </div>
@@ -687,10 +646,10 @@ Respond ONLY with a valid JSON array, no markdown:
             {currentUser&&(showAddBook?(
               <div className="aform">
                 <div className="fgrp" style={{position:"relative"}}>
-                  <label>Search for a book (or fill in manually below)</label>
+                  <label>Search for a book</label>
                   <BookSearchInput onSelect={b=>setNewBook(n=>({...n,title:b.title,author:b.author,genre:b.genre,cover:b.cover,description:b.description,googleId:b.googleId}))}/>
                 </div>
-                {newBook.cover&&<div className="selected-cover"><img src={newBook.cover} alt=""/><span>{newBook.title}</span></div>}
+                {newBook.cover&&<div className="selected-cover"><img src={newBook.cover} alt=""/><span>{newBook.title} — cover found ✓</span></div>}
                 <div className="frow">
                   <div className="fgrp"><label>Title</label><input value={newBook.title} onChange={e=>setNewBook(b=>({...b,title:e.target.value}))} placeholder="Book title"/></div>
                   <div className="fgrp"><label>Author</label><input value={newBook.author} onChange={e=>setNewBook(b=>({...b,author:e.target.value}))} placeholder="Author name"/></div>
@@ -715,9 +674,9 @@ Respond ONLY with a valid JSON array, no markdown:
           <div>
             <div className="section-hdr">
               <div className="section-title">Suggestions</div>
-              <div className="section-count">{suggestions.length}</div>
+              <div className="section-count">{suggestions.length} ideas</div>
             </div>
-            {sortedSuggs.length===0&&<div className="empty"><div className="empty-title">No Suggestions Yet</div><div className="empty-sub">Be the first!</div></div>}
+            {sortedSuggs.length===0&&<div className="empty"><div className="empty-title">No suggestions yet</div><div className="empty-sub">Be the first!</div></div>}
             <div className="slist">
               {sortedSuggs.map(s=>(
                 <div key={s.id} className="scard">
@@ -748,7 +707,7 @@ Respond ONLY with a valid JSON array, no markdown:
                   <label>Search for a book</label>
                   <BookSearchInput onSelect={b=>setNewSugg(s=>({...s,title:b.title,author:b.author,genre:b.genre,cover:b.cover,description:b.description}))}/>
                 </div>
-                {newSugg.cover&&<div className="selected-cover"><img src={newSugg.cover} alt=""/><span>{newSugg.title}</span></div>}
+                {newSugg.cover&&<div className="selected-cover"><img src={newSugg.cover} alt=""/><span>{newSugg.title} — cover found ✓</span></div>}
                 <div className="frow">
                   <div className="fgrp"><label>Title</label><input value={newSugg.title} onChange={e=>setNewSugg(s=>({...s,title:e.target.value}))} placeholder="Book title"/></div>
                   <div className="fgrp"><label>Author</label><input value={newSugg.author} onChange={e=>setNewSugg(s=>({...s,author:e.target.value}))} placeholder="Author"/></div>
@@ -775,12 +734,13 @@ Respond ONLY with a valid JSON array, no markdown:
             <p className="ai-intro">Claude analyses everyone's ratings, book descriptions, and suggestions — then ranks the 10 best next reads for the group.</p>
             {currentUser===ADMIN?(
               <button className="aibtn" onClick={getAIRecs} disabled={aiLoading}>
-                {aiLoading?"✦ Thinking…":"✦ Refresh Top 10"}
+                {aiLoading?"Thinking…":"✦ Refresh Top 10"}
               </button>
             ):(
-              <div className="ai-view-only">
-                <strong>Only Ellie can refresh this list.</strong> Ask her to generate a new one at your next meeting!
-              </div>
+              <div className="ai-view-only"><strong>Only Ellie can refresh this list.</strong> Ask her to generate a new one at your next meeting!</div>
+            )}
+            {aiRecs.length===0&&!aiLoading&&(
+              <div className="no-recs">{currentUser===ADMIN?"Hit the button above to generate recommendations!":"Ask Ellie to generate the list!"}</div>
             )}
             {aiRecs.length>0&&!aiRecs[0]?.error&&(
               <div className="recs-list">
@@ -792,20 +752,84 @@ Respond ONLY with a valid JSON array, no markdown:
                     {rec.cover?<img src={rec.cover} alt="" className="rec-cover"/>:<div className="rec-cover-ph">📖</div>}
                     <div className="rec-body">
                       <div className="rec-title">{rec.title}</div>
-                      <div className="rec-author">by {rec.author} · {rec.genre}
-                        {rec.fromSuggestions&&<span className="rec-from">from suggestions</span>}
-                      </div>
+                      <div className="rec-author">by {rec.author} · {rec.genre}</div>
                       <div className="rec-why">{rec.whyThisBook}</div>
-                      <div className="rec-match">{rec.matchScore}% match</div>
+                      <div className="rec-footer">
+                        <div className="rec-match">{rec.matchScore}% match</div>
+                        {rec.fromSuggestions&&<div className="rec-from">from your suggestions</div>}
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
             )}
-            {aiRecs.length===0&&!aiLoading&&(
-              <div className="no-recs">No recommendations generated yet. {currentUser===ADMIN?"Hit the button above!":"Ask Ellie to generate some!"}</div>
-            )}
             {aiRecs[0]?.error&&<div className="aierr">Couldn't get recommendations — try again in a moment.</div>}
+          </div>
+        )}
+
+        {/* ── MY BOOKS (PERSONAL) ── */}
+        {tab==="personal"&&(
+          <div>
+            <div className="section-hdr">
+              <div className="section-title">Personal reading lists</div>
+            </div>
+            {/* Member selector */}
+            <div className="personal-who">
+              {MEMBERS.map(m=>(
+                <button key={m} className={`pwho-btn ${currentUser===m?"on":""}`} onClick={()=>setCurrentUser(m)}>{m}</button>
+              ))}
+            </div>
+
+            {!currentUser&&<div className="need-name">Select a member above to see their personal reading list.</div>}
+
+            {currentUser&&(
+              <>
+                <div style={{marginBottom:16}}>
+                  <strong style={{fontFamily:"var(--D)",fontSize:18,textTransform:"uppercase",letterSpacing:"-.1px"}}>{currentUser}'s personal reads</strong>
+                  <span style={{fontSize:12,color:"var(--mid)",marginLeft:8}}>{myPersonalBooks.length} books</span>
+                </div>
+                {myPersonalBooks.length===0&&<div className="personal-empty">Nothing added yet — add your first personal read below!</div>}
+                <div className="personal-grid">
+                  {myPersonalBooks.map(book=>(
+                    <div key={book.id} className="bcard">
+                      {book.cover?<img src={book.cover} alt="" className="bcover"/>:<div className="bcover-ph">📚</div>}
+                      <div className="binfo">
+                        <div className="btitle">{book.title}</div>
+                        <div className="bauthor">{book.author}</div>
+                        <span className="bgenre">{book.genre}</span>
+                      </div>
+                      <div className="bright">
+                        <div><div className="avgscore">{book.rating||"—"}</div><div className="avglbl">/ 10</div></div>
+                        <button className="delbtn" onClick={()=>deletePersonalBook(book.id)}>✕</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {showAddPersonal?(
+                  <div className="aform">
+                    <div className="fgrp" style={{position:"relative"}}>
+                      <label>Search for a book</label>
+                      <BookSearchInput onSelect={b=>setNewPersonal(p=>({...p,title:b.title,author:b.author,genre:b.genre,cover:b.cover,description:b.description}))}/>
+                    </div>
+                    {newPersonal.cover&&<div className="selected-cover"><img src={newPersonal.cover} alt=""/><span>{newPersonal.title} — cover found ✓</span></div>}
+                    <div className="frow">
+                      <div className="fgrp"><label>Title</label><input value={newPersonal.title} onChange={e=>setNewPersonal(p=>({...p,title:e.target.value}))} placeholder="Book title"/></div>
+                      <div className="fgrp"><label>Author</label><input value={newPersonal.author} onChange={e=>setNewPersonal(p=>({...p,author:e.target.value}))} placeholder="Author"/></div>
+                    </div>
+                    <div className="frow">
+                      <div className="fgrp"><label>Genre</label><select value={newPersonal.genre} onChange={e=>setNewPersonal(p=>({...p,genre:e.target.value}))}>{GENRES.map(g=><option key={g}>{g}</option>)}</select></div>
+                    </div>
+                    <div><div className="rlbl">Your Rating</div><StarRating value={newPersonal.myRating} onChange={v=>setNewPersonal(p=>({...p,myRating:v}))}/></div>
+                    <div className="factions">
+                      <button className="bprimary" onClick={addPersonalBook}>Add</button>
+                      <button className="bcancel" onClick={()=>setShowAddPersonal(false)}>Cancel</button>
+                    </div>
+                  </div>
+                ):(
+                  <button className="addbtn" onClick={()=>setShowAddPersonal(true)}>＋ Add to {currentUser}'s reading list</button>
+                )}
+              </>
+            )}
           </div>
         )}
       </div>
