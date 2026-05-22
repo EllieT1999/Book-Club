@@ -9,7 +9,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const GENRES = ["Literary Fiction","Fiction","Memoir","Non-Fiction","Mystery","Sci-Fi","Fantasy","Historical Fiction","Romance","Thriller","Biography","Self-Help","Crime","Short Stories","Poetry"];
 const MEMBERS = ["Ali","Bec","Cassie","Chloe","Chloe VN","Deem","Ellie","Emma","Erin","Evie","Gabby","Georgie","Hannah","Harriet","Izzy","Jorgia","Lara","Lillay","Maddie","Molly","Pip","Rachel","Ruby","Sanyogita","Soph","Tash"];
-const ADMIN = "Ellie";
+const ADMIN = ["Ellie"];
 
 function avgRating(ratings) {
   const vals = Object.values(ratings || {}).filter(v => v != null);
