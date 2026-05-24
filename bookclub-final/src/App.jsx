@@ -112,6 +112,8 @@ function CoverUpload({ onUpload, currentCover }) {
     </div>
   );
 }
+
+export default function BookClub() {
   const [currentUser, setCurrentUser] = useState("");
   const [books, setBooks] = useState([]);
   const [personalBooks, setPersonalBooks] = useState([]);
