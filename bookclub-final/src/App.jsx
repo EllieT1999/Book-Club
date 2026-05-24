@@ -8,7 +8,7 @@ const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const GENRES = ["Literary Fiction","Fiction","Memoir","Non-Fiction","Mystery","Sci-Fi","Fantasy","Historical Fiction","Romance","Thriller","Biography","Self-Help","Crime","Short Stories","Poetry"];
-const MEMBERS = ["Ali","Bec","Cassie","Chloe","Chloe VN","Deem","Ellie","Emma","Erin","Evie","Gabby","Georgie","Hannah","Harriet","Izzy","Jorgia","Lara","Lillay","Maddie","Molly","Pip","Rachel","Ruby","Sanyogita","Soph","Tash"];
+const MEMBERS = ["Tash","Chloe","Ali","Ellie","Bec","Rachel","Soph","Emma","Georgie","Izzy","Maddie","Cassie"];
 const ADMIN = "Ellie";
 
 function avgRating(ratings) {
@@ -20,7 +20,7 @@ function avgRating(ratings) {
 async function searchGoogleBooks(query) {
   if (!query || query.length < 3) return [];
   try {
-    const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=6&langRestrict=en&key=AIzaSyB0tiDDzhBrrhLGOlR9s-dcRuTm1qbYwY4`);
+    const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=6&langRestrict=en&key=${import.meta.env.VITE_GOOGLE_BOOKS_KEY}`);
     const data = await res.json();
     return (data.items || []).map(item => ({
       googleId: item.id,
@@ -134,15 +134,12 @@ export default function BookClub() {
 
   useEffect(() => {
     fetchAll();
-    // Refetch after any local action completes immediately
-    // Plus poll every 3 seconds to catch other members' changes
-    const interval = setInterval(fetchAll, 3000);
     const subs = [
       supabase.channel("bc").on("postgres_changes", { event:"*", schema:"public", table:"books" }, fetchAll).subscribe(),
       supabase.channel("sg").on("postgres_changes", { event:"*", schema:"public", table:"suggestions" }, fetchAll).subscribe(),
       supabase.channel("pb").on("postgres_changes", { event:"*", schema:"public", table:"personal_books" }, fetchAll).subscribe(),
     ];
-    return () => { clearInterval(interval); subs.forEach(s => s.unsubscribe()); };
+    return () => subs.forEach(s => s.unsubscribe());
   }, [fetchAll]);
 
   async function addBook() {
@@ -157,14 +154,12 @@ export default function BookClub() {
     });
     if (error) { alert("Error: " + error.message); return; }
     setNewBook(emptyBook);
-    await fetchAll();
     setShowAddBook(false);
   }
 
- async function deleteBook(id) {
+  async function deleteBook(id) {
     if (!confirm("Delete this book?")) return;
     await supabase.from("books").delete().eq("id", id);
-    await fetchAll();
   }
 
   async function saveEdit() {
@@ -201,14 +196,12 @@ export default function BookClub() {
     });
     if (error) { alert("Error: " + error.message); return; }
     setNewSugg(emptySugg);
-    await fetchAll();
     setShowAddSugg(false);
   }
 
   async function deleteSuggestion(id) {
     if (!confirm("Delete this suggestion?")) return;
     await supabase.from("suggestions").delete().eq("id", id);
-    await fetchAll();
   }
 
   async function toggleVote(sugg) {
@@ -228,35 +221,71 @@ export default function BookClub() {
     });
     if (error) { alert("Error: " + error.message); return; }
     setNewPersonal(emptyPersonal);
-    await fetchAll();
     setShowAddPersonal(false);
   }
 
-async function deletePersonalBook(id) {
+  async function deletePersonalBook(id) {
     if (!confirm("Delete this book?")) return;
     await supabase.from("personal_books").delete().eq("id", id);
-    await fetchAll();
   }
 
   async function getAIRecs() {
     setAiLoading(true);
-    const bookSummary = books.map(b =>
-      `"${b.title}" by ${b.author} (${b.genre}) - avg ${avgRating(b.ratings)||"unrated"}/10${b.description ? `. About: ${b.description.slice(0,120)}` : ""}. Ratings: ${Object.entries(b.ratings||{}).map(([m,r])=>`${m}:${r}`).join(", ")}`
-    ).join("\n");
-    const suggSummary = suggestions.map(s =>
-      `"${s.title}" by ${s.author} (${s.genre})${s.reason ? `. Why: ${s.reason}` : ""} — ${s.votes?.length||0} vote(s)`
-    ).join("\n");
-    const prompt = `You are a book recommendation expert for a book club of ${MEMBERS.length} women: ${MEMBERS.join(", ")}.
-BOOKS ALREADY READ:\n${bookSummary || "None yet"}
-MEMBER SUGGESTIONS:\n${suggSummary || "None yet"}
-Return a ranked list of exactly 10 book recommendations. Prioritise suggestions if they fit well.
-Respond ONLY with a valid JSON array, no markdown:
-[{"rank":1,"title":"","author":"","genre":"","fromSuggestions":false,"whyThisBook":"2 sentences","matchScore":85}]`;
+    setAiRecs([]);
+
+    // Build personal books summary — only books rated 7+ out of 10
+    const highlyRatedPersonal = personalBooks.filter(b => (b.rating || 0) >= 7);
+    const memberTastes = MEMBERS.map(member => {
+      const theirBooks = highlyRatedPersonal.filter(b => b.member === member);
+      if (!theirBooks.length) return null;
+      return `${member} (rated 7+/10): ${theirBooks.map(b => `"${b.title}" by ${b.author} (${b.genre}, ${b.rating}/10)`).join(", ")}`;
+    }).filter(Boolean).join("\n");
+
+    // Books already read as a group (for context — don't re-recommend these)
+    const alreadyRead = books.map(b => `"${b.title}" by ${b.author}`).join(", ");
+
+    // Member suggestions as secondary signal
+    const suggSummary = suggestions.length
+      ? suggestions.map(s => `"${s.title}" by ${s.author} (${s.genre}) — suggested by ${s.suggested_by}${s.reason ? `, reason: ${s.reason}` : ""}, ${s.votes?.length||0} vote(s)`).join("\n")
+      : "None";
+
+    const prompt = `You are an expert book recommendation engine for a women's book club with ${MEMBERS.length} members.
+
+YOUR PRIMARY DATA SOURCE — Members' personal reading lists (books they've personally read and rated 7 or higher out of 10, meaning they genuinely loved them):
+${memberTastes || "No personal books rated 7+ yet — use suggestions and general taste inference instead."}
+
+SECONDARY SIGNAL — Books members have suggested for the club:
+${suggSummary}
+
+ALREADY READ AS A GROUP (do NOT recommend these):
+${alreadyRead || "None yet"}
+
+YOUR TASK:
+Analyse the crossover in taste between members. Look for:
+- Genres, themes, writing styles, and authors that multiple members love
+- Hidden connections between what different members enjoy
+- Books that would genuinely satisfy the most members based on their proven reading tastes
+
+Return a ranked list of exactly 10 books the whole group should read next. For each, explain specifically WHICH members' taste it matches and why, based on their personal reading history.
+
+Respond ONLY with a valid JSON array, no markdown, no extra text:
+[{
+  "rank": 1,
+  "title": "string",
+  "author": "string",
+  "genre": "string",
+  "fromSuggestions": false,
+  "whyThisBook": "2 sentences on why this fits the group's collective taste",
+  "memberMatch": [{"name": "MemberName", "reason": "one short sentence why this member will love it"}],
+  "tasteOverlap": "one sentence describing the shared taste pattern this pick targets",
+  "matchScore": 85
+}]`;
+
     try {
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "Content-Type":"application/json", "x-api-key":ANTHROPIC_API_KEY, "anthropic-version":"2023-06-01" },
-        body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:2000, messages:[{ role:"user", content:prompt }] })
+        body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:3000, messages:[{ role:"user", content:prompt }] })
       });
       const data = await res.json();
       const text = data.content?.find(b => b.type==="text")?.text || "";
@@ -267,6 +296,7 @@ Respond ONLY with a valid JSON array, no markdown:
       }));
       setAiRecs(enriched);
     } catch(e) {
+      console.error(e);
       setAiRecs([{ error: true }]);
     }
     setAiLoading(false);
@@ -501,6 +531,12 @@ Respond ONLY with a valid JSON array, no markdown:
     .rec-match{display:inline-block;background:var(--yellow);color:var(--black);font-family:var(--D);font-size:12px;font-weight:700;border-radius:3px;padding:2px 8px}
     .rec-from{display:inline-block;background:var(--bg);border:1px solid var(--border);font-size:10px;border-radius:3px;padding:2px 7px;text-transform:uppercase;letter-spacing:.05em;color:var(--mid)}
     .no-recs{padding:32px 0;color:var(--mid);font-size:13px;font-style:italic}
+    .ai-data-warning{background:var(--yellow);border-radius:6px;padding:10px 14px;font-size:13px;font-weight:500;margin-bottom:16px;max-width:560px;color:var(--black)}
+    .rec-overlap{font-size:11px;color:var(--red);font-weight:600;margin-top:6px;text-transform:uppercase;letter-spacing:.04em}
+    .rec-members{display:flex;flex-direction:column;gap:4px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
+    .rec-member-row{display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
+    .rec-member-name{font-size:11px;font-weight:700;color:var(--black);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
+    .rec-member-reason{font-size:11px;color:var(--mid);font-style:italic}
 
     /* ── FORMS ── */
     .addbtn{display:flex;align-items:center;gap:7px;background:none;border:1px dashed var(--border);border-radius:6px;padding:11px 16px;width:100%;cursor:pointer;color:var(--mid);font-family:var(--B);font-size:13px;transition:all .12s;margin-top:10px}
@@ -740,16 +776,19 @@ Respond ONLY with a valid JSON array, no markdown:
         {tab==="recommend"&&(
           <div>
             <div className="section-hdr"><div className="section-title">AI Top 10</div></div>
-            <p className="ai-intro">Claude analyses everyone's ratings, book descriptions, and suggestions — then ranks the 10 best next reads for the group.</p>
+            <p className="ai-intro">Claude analyses everyone's personal reading lists (books rated 7+/10) to find crossover in taste — then picks the 10 books most likely to be loved by the whole group. Member suggestions also feed in as a secondary signal.</p>
+            {personalBooks.filter(b=>(b.rating||0)>=7).length < 3 && (
+              <div className="ai-data-warning">💡 The more books everyone adds to their personal reading list with ratings, the better the recommendations will be!</div>
+            )}
             {currentUser===ADMIN?(
               <button className="aibtn" onClick={getAIRecs} disabled={aiLoading}>
-                {aiLoading?"Thinking…":"✦ Refresh Top 10"}
+                {aiLoading?"Analysing everyone's taste…":"✦ Generate Top 10"}
               </button>
             ):(
-              <div className="ai-view-only"><strong>Only Ellie can refresh this list.</strong> Ask her to generate a new one at your next meeting!</div>
+              <div className="ai-view-only"><strong>Only Ellie can generate this list.</strong> Ask her to run it at your next meeting!</div>
             )}
             {aiRecs.length===0&&!aiLoading&&(
-              <div className="no-recs">{currentUser===ADMIN?"Hit the button above to generate recommendations!":"Ask Ellie to generate the list!"}</div>
+              <div className="no-recs">{currentUser===ADMIN?"Hit the button above — the more personal books everyone has added, the better!":"Ask Ellie to generate the list!"}</div>
             )}
             {aiRecs.length>0&&!aiRecs[0]?.error&&(
               <div className="recs-list">
@@ -761,11 +800,23 @@ Respond ONLY with a valid JSON array, no markdown:
                     {rec.cover?<img src={rec.cover} alt="" className="rec-cover"/>:<div className="rec-cover-ph">📖</div>}
                     <div className="rec-body">
                       <div className="rec-title">{rec.title}</div>
-                      <div className="rec-author">by {rec.author} · {rec.genre}</div>
+                      <div className="rec-author">by {rec.author} · {rec.genre}
+                        {rec.fromSuggestions&&<span className="rec-from">from suggestions</span>}
+                      </div>
                       <div className="rec-why">{rec.whyThisBook}</div>
+                      {rec.tasteOverlap&&<div className="rec-overlap">✦ {rec.tasteOverlap}</div>}
+                      {rec.memberMatch&&rec.memberMatch.length>0&&(
+                        <div className="rec-members">
+                          {rec.memberMatch.map((m,i)=>(
+                            <div key={i} className="rec-member-row">
+                              <span className="rec-member-name">{m.name}</span>
+                              <span className="rec-member-reason">{m.reason}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       <div className="rec-footer">
-                        <div className="rec-match">{rec.matchScore}% match</div>
-                        {rec.fromSuggestions&&<div className="rec-from">from your suggestions</div>}
+                        <div className="rec-match">{rec.matchScore}% group match</div>
                       </div>
                     </div>
                   </div>
@@ -783,10 +834,16 @@ Respond ONLY with a valid JSON array, no markdown:
               <div className="section-title">Personal reading lists</div>
             </div>
             {/* Member selector */}
-            <div className="personal-who">
-              {MEMBERS.map(m=>(
-                <button key={m} className={`pwho-btn ${currentUser===m?"on":""}`} onClick={()=>setCurrentUser(m)}>{m}</button>
-              ))}
+            <div style={{marginBottom:20}}>
+              <select
+                className="user-dropdown"
+                value={currentUser}
+                onChange={e=>setCurrentUser(e.target.value)}
+                style={{minWidth:160}}
+              >
+                <option value="">Select a member…</option>
+                {MEMBERS.map(m=><option key={m} value={m}>{m}</option>)}
+              </select>
             </div>
 
             {!currentUser&&<div className="need-name">Select a member above to see their personal reading list.</div>}
