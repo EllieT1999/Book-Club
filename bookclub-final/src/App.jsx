@@ -8,7 +8,7 @@ const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const GENRES = ["Literary Fiction","Fiction","Memoir","Non-Fiction","Mystery","Sci-Fi","Fantasy","Historical Fiction","Romance","Thriller","Biography","Self-Help","Crime","Short Stories","Poetry"];
-const MEMBERS = ["Tash","Chloe","Ali","Ellie","Bec","Rachel","Soph","Emma","Georgie","Izzy","Maddie","Cassie"];
+const MEMBERS = ["Ali","Bec","Cassie","Chloe","Chloe VN","Deem","Ellie","Emma","Erin","Evie","Gabby","Georgie","Hannah","Harriet","Izzy","Jorgia","Lara","Lillay","Maddie","Molly","Pip","Rachel","Ruby","Sanyogita","Soph","Tash"];
 const ADMIN = "Ellie";
 
 function avgRating(ratings) {
