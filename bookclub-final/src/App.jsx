@@ -8,7 +8,7 @@ const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const GENRES = ["Literary Fiction","Fiction","Memoir","Non-Fiction","Mystery","Sci-Fi","Fantasy","Historical Fiction","Romance","Thriller","Biography","Self-Help","Crime","Short Stories","Poetry"];
-const MEMBERS = ["Ali","Bec","Cassie","Chloe","Chloe VN","Deem","Ellie","Emma","Erin","Evie","Gabby","Georgie","Hannah","Harriet","Izzy","Jorgia","Lara","Lillay","Maddie","Molly","Pip","Rachel","Ruby","Sanyogita","Soph","Tash"];
+const MEMBERS = ["Ali","Bec","Cassie","Chloe","Chloe VN","Ellie","Emma","Erin","Evie","Gabby","Georgie","Hannah","Harriet","Izzy","Jorgia","Lara","Lillay","Maddie","Molly","Pip","Rachel","Ruby","Sanyogita","Soph","Tash"];
 const ADMIN = "Ellie";
 
 function avgRating(ratings) {
@@ -91,7 +91,27 @@ function BookSearchInput({ onSelect }) {
   );
 }
 
-export default function BookClub() {
+function CoverUpload({ onUpload, currentCover }) {
+  const fileRef = useRef(null);
+
+  function handleFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => onUpload(ev.target.result);
+    reader.readAsDataURL(file);
+  }
+
+  return (
+    <div className="cover-upload-wrap">
+      <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={handleFile}/>
+      <button type="button" className="cover-upload-btn" onClick={()=>fileRef.current.click()}>
+        {currentCover ? "📷 Change cover image" : "📷 Upload cover image"}
+      </button>
+      <span className="cover-upload-hint">Use this if the search didn't find the right cover</span>
+    </div>
+  );
+}
   const [currentUser, setCurrentUser] = useState("");
   const [books, setBooks] = useState([]);
   const [personalBooks, setPersonalBooks] = useState([]);
@@ -102,7 +122,9 @@ export default function BookClub() {
   const [showAddBook, setShowAddBook] = useState(false);
   const [showAddSugg, setShowAddSugg] = useState(false);
   const [showAddPersonal, setShowAddPersonal] = useState(false);
-  const [editModal, setEditModal] = useState(null);
+  const [editPersonalModal, setEditPersonalModal] = useState(null);
+  const [commentPersonalModal, setCommentPersonalModal] = useState(null);
+  const [personalComment, setPersonalComment] = useState("");
   const [rateModal, setRateModal] = useState(null);
   const [commentModal, setCommentModal] = useState(null);
   const [myRating, setMyRating] = useState(7);
@@ -240,6 +262,19 @@ export default function BookClub() {
     await fetchAll();
   }
 
+  async function savePersonalEdit(id, updates) {
+    await supabase.from("personal_books").update(updates).eq("id", id);
+    await fetchAll();
+    setEditPersonalModal(null);
+  }
+
+  async function savePersonalComment(id) {
+    await supabase.from("personal_books").update({ comment: personalComment }).eq("id", id);
+    await fetchAll();
+    setCommentPersonalModal(null);
+    setPersonalComment("");
+  }
+
   async function getAIRecs() {
     setAiLoading(true);
     setAiRecs([]);
@@ -286,6 +321,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
   "author": "string",
   "genre": "string",
   "fromSuggestions": false,
+  "blurb": "2-3 sentence enticing description of what the book is about and why it's a compelling read",
   "whyThisBook": "2 sentences on why this fits the group's collective taste",
   "memberMatch": [{"name": "MemberName", "reason": "one short sentence why this member will love it"}],
   "tasteOverlap": "one sentence describing the shared taste pattern this pick targets",
@@ -544,6 +580,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
     .no-recs{padding:32px 0;color:var(--mid);font-size:13px;font-style:italic}
     .ai-data-warning{background:var(--yellow);border-radius:6px;padding:10px 14px;font-size:13px;font-weight:500;margin-bottom:16px;max-width:560px;color:var(--black)}
     .rec-overlap{font-size:11px;color:var(--red);font-weight:600;margin-top:6px;text-transform:uppercase;letter-spacing:.04em}
+    .rec-blurb{font-size:12px;line-height:1.6;margin-top:6px;color:var(--black);font-style:italic;padding:8px 10px;background:var(--bg);border-radius:4px;border-left:2px solid var(--yellow)}
     .rec-members{display:flex;flex-direction:column;gap:4px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
     .rec-member-row{display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
     .rec-member-name{font-size:11px;font-weight:700;color:var(--black);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
@@ -568,6 +605,10 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
     .selected-cover{display:flex;align-items:center;gap:10px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:5px}
     .selected-cover img{width:32px;height:46px;object-fit:cover;border-radius:3px}
     .selected-cover span{font-size:12px;color:var(--mid);font-style:italic}
+    .cover-upload-wrap{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    .cover-upload-btn{background:none;border:1px solid var(--border);border-radius:5px;padding:7px 12px;font-size:12px;font-family:var(--B);cursor:pointer;color:var(--mid);transition:all .12s;white-space:nowrap}
+    .cover-upload-btn:hover{border-color:var(--black);color:var(--black)}
+    .cover-upload-hint{font-size:11px;color:var(--mid);font-style:italic}
 
     /* ── SEARCH ── */
     .search-input{padding:8px 10px;border:1px solid var(--border);border-radius:5px;background:#fff;font-family:var(--B);font-size:13px;color:var(--black);outline:none;width:100%;transition:border-color .12s}
@@ -706,6 +747,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
                   <BookSearchInput onSelect={b=>setNewBook(n=>({...n,title:b.title,author:b.author,genre:b.genre,cover:b.cover,description:b.description,googleId:b.googleId}))}/>
                 </div>
                 {newBook.cover&&<div className="selected-cover"><img src={newBook.cover} alt=""/><span>{newBook.title} — cover found ✓</span></div>}
+                <CoverUpload currentCover={newBook.cover} onUpload={url=>setNewBook(b=>({...b,cover:url}))}/>
                 <div className="frow">
                   <div className="fgrp"><label>Title</label><input value={newBook.title} onChange={e=>setNewBook(b=>({...b,title:e.target.value}))} placeholder="Book title"/></div>
                   <div className="fgrp"><label>Author</label><input value={newBook.author} onChange={e=>setNewBook(b=>({...b,author:e.target.value}))} placeholder="Author name"/></div>
@@ -764,6 +806,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
                   <BookSearchInput onSelect={b=>setNewSugg(s=>({...s,title:b.title,author:b.author,genre:b.genre,cover:b.cover,description:b.description}))}/>
                 </div>
                 {newSugg.cover&&<div className="selected-cover"><img src={newSugg.cover} alt=""/><span>{newSugg.title} — cover found ✓</span></div>}
+                <CoverUpload currentCover={newSugg.cover} onUpload={url=>setNewSugg(s=>({...s,cover:url}))}/>
                 <div className="frow">
                   <div className="fgrp"><label>Title</label><input value={newSugg.title} onChange={e=>setNewSugg(s=>({...s,title:e.target.value}))} placeholder="Book title"/></div>
                   <div className="fgrp"><label>Author</label><input value={newSugg.author} onChange={e=>setNewSugg(s=>({...s,author:e.target.value}))} placeholder="Author"/></div>
@@ -814,6 +857,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
                       <div className="rec-author">by {rec.author} · {rec.genre}
                         {rec.fromSuggestions&&<span className="rec-from">from suggestions</span>}
                       </div>
+                      {rec.blurb&&<div className="rec-blurb">{rec.blurb}</div>}
                       <div className="rec-why">{rec.whyThisBook}</div>
                       {rec.tasteOverlap&&<div className="rec-overlap">✦ {rec.tasteOverlap}</div>}
                       {rec.memberMatch&&rec.memberMatch.length>0&&(
@@ -874,10 +918,17 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
                         <div className="btitle">{book.title}</div>
                         <div className="bauthor">{book.author}</div>
                         <span className="bgenre">{book.genre}</span>
+                        {book.comment&&<div className="bcomments"><div className="bcomment"><span>{book.comment}</span></div></div>}
                       </div>
                       <div className="bright">
                         <div><div className="avgscore">{book.rating||"—"}</div><div className="avglbl">/ 10</div></div>
-                        <button className="delbtn" onClick={()=>deletePersonalBook(book.id)}>✕</button>
+                        <div className="btn-row">
+                          <button className="commentbtn" onClick={()=>{setCommentPersonalModal(book);setPersonalComment(book.comment||"")}}>
+                            {book.comment?"Edit note":"Note"}
+                          </button>
+                          <button className="iconbtn" onClick={()=>setEditPersonalModal(book)}>✏️</button>
+                          <button className="delbtn" onClick={()=>deletePersonalBook(book.id)}>✕</button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -889,6 +940,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
                       <BookSearchInput onSelect={b=>setNewPersonal(p=>({...p,title:b.title,author:b.author,genre:b.genre,cover:b.cover,description:b.description}))}/>
                     </div>
                     {newPersonal.cover&&<div className="selected-cover"><img src={newPersonal.cover} alt=""/><span>{newPersonal.title} — cover found ✓</span></div>}
+                    <CoverUpload currentCover={newPersonal.cover} onUpload={url=>setNewPersonal(p=>({...p,cover:url}))}/>
                     <div className="frow">
                       <div className="fgrp"><label>Title</label><input value={newPersonal.title} onChange={e=>setNewPersonal(p=>({...p,title:e.target.value}))} placeholder="Book title"/></div>
                       <div className="fgrp"><label>Author</label><input value={newPersonal.author} onChange={e=>setNewPersonal(p=>({...p,author:e.target.value}))} placeholder="Author"/></div>
@@ -956,6 +1008,54 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
             <div className="factions">
               <button className="bprimary" onClick={saveEdit}>Save</button>
               <button className="bcancel" onClick={()=>setEditModal(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Personal book edit modal */}
+      {editPersonalModal&&(
+        <div className="overlay" onClick={()=>setEditPersonalModal(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <h3>Edit Book</h3>
+            <p>Editing your personal entry for this book</p>
+            <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:14}}>
+              <div className="fgrp"><label>Title</label><input defaultValue={editPersonalModal.title||""} id="pedit-title"/></div>
+              <div className="fgrp"><label>Author</label><input defaultValue={editPersonalModal.author||""} id="pedit-author"/></div>
+              <div className="fgrp"><label>Genre</label>
+                <select defaultValue={editPersonalModal.genre||"Fiction"} id="pedit-genre">
+                  {GENRES.map(g=><option key={g}>{g}</option>)}
+                </select>
+              </div>
+              <div>
+                <div className="rlbl">Your Rating</div>
+                <StarRating value={editPersonalModal.rating||7} onChange={v=>setEditPersonalModal(m=>({...m,rating:v}))}/>
+              </div>
+            </div>
+            <div className="factions">
+              <button className="bprimary" onClick={()=>savePersonalEdit(editPersonalModal.id,{
+                title: document.getElementById("pedit-title").value,
+                author: document.getElementById("pedit-author").value,
+                genre: document.getElementById("pedit-genre").value,
+                rating: editPersonalModal.rating,
+              })}>Save</button>
+              <button className="bcancel" onClick={()=>setEditPersonalModal(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Personal book comment modal */}
+      {commentPersonalModal&&(
+        <div className="overlay" onClick={()=>setCommentPersonalModal(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <h3>{commentPersonalModal.title}</h3>
+            <p>Why do you love this book?</p>
+            <div className="rlbl">Your Note</div>
+            <textarea className="modal-textarea" value={personalComment} onChange={e=>setPersonalComment(e.target.value)} placeholder="What did you love about it? A favourite quote, theme, or feeling it gave you…"/>
+            <div className="factions" style={{marginTop:14}}>
+              <button className="bprimary" onClick={()=>savePersonalComment(commentPersonalModal.id)}>Save</button>
+              <button className="bcancel" onClick={()=>setCommentPersonalModal(null)}>Cancel</button>
             </div>
           </div>
         </div>
