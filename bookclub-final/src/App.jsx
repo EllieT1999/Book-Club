@@ -122,6 +122,7 @@ function CoverUpload({ onUpload, currentCover }) {
   const [showAddBook, setShowAddBook] = useState(false);
   const [showAddSugg, setShowAddSugg] = useState(false);
   const [showAddPersonal, setShowAddPersonal] = useState(false);
+  const [editModal, setEditModal] = useState(null);
   const [editPersonalModal, setEditPersonalModal] = useState(null);
   const [commentPersonalModal, setCommentPersonalModal] = useState(null);
   const [personalComment, setPersonalComment] = useState("");
