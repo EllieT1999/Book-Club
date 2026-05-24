@@ -134,12 +134,13 @@ export default function BookClub() {
 
   useEffect(() => {
     fetchAll();
+    const interval = setInterval(fetchAll, 3000);
     const subs = [
       supabase.channel("bc").on("postgres_changes", { event:"*", schema:"public", table:"books" }, fetchAll).subscribe(),
       supabase.channel("sg").on("postgres_changes", { event:"*", schema:"public", table:"suggestions" }, fetchAll).subscribe(),
       supabase.channel("pb").on("postgres_changes", { event:"*", schema:"public", table:"personal_books" }, fetchAll).subscribe(),
     ];
-    return () => subs.forEach(s => s.unsubscribe());
+    return () => { clearInterval(interval); subs.forEach(s => s.unsubscribe()); };
   }, [fetchAll]);
 
   async function addBook() {
@@ -154,12 +155,14 @@ export default function BookClub() {
     });
     if (error) { alert("Error: " + error.message); return; }
     setNewBook(emptyBook);
+    await fetchAll();
     setShowAddBook(false);
   }
 
   async function deleteBook(id) {
     if (!confirm("Delete this book?")) return;
     await supabase.from("books").delete().eq("id", id);
+    await fetchAll();
   }
 
   async function saveEdit() {
@@ -167,6 +170,7 @@ export default function BookClub() {
       title: editForm.title, author: editForm.author,
       genre: editForm.genre, cover: editForm.cover, description: editForm.description,
     }).eq("id", editModal.id);
+    await fetchAll();
     setEditModal(null);
   }
 
@@ -174,6 +178,7 @@ export default function BookClub() {
     const book = books.find(b => b.id === bookId);
     const updated = { ...(book.ratings || {}), [currentUser]: myRating };
     await supabase.from("books").update({ ratings: updated }).eq("id", bookId);
+    await fetchAll();
     setRateModal(null);
   }
 
@@ -181,6 +186,7 @@ export default function BookClub() {
     const book = books.find(b => b.id === bookId);
     const updated = { ...(book.comments || {}), [currentUser]: myComment };
     await supabase.from("books").update({ comments: updated }).eq("id", bookId);
+    await fetchAll();
     setCommentModal(null);
     setMyComment("");
   }
@@ -196,18 +202,21 @@ export default function BookClub() {
     });
     if (error) { alert("Error: " + error.message); return; }
     setNewSugg(emptySugg);
+    await fetchAll();
     setShowAddSugg(false);
   }
 
   async function deleteSuggestion(id) {
     if (!confirm("Delete this suggestion?")) return;
     await supabase.from("suggestions").delete().eq("id", id);
+    await fetchAll();
   }
 
   async function toggleVote(sugg) {
     const has = (sugg.votes || []).includes(currentUser);
     const updated = has ? sugg.votes.filter(v => v !== currentUser) : [...(sugg.votes||[]), currentUser];
     await supabase.from("suggestions").update({ votes: updated }).eq("id", sugg.id);
+    await fetchAll();
   }
 
   async function addPersonalBook() {
@@ -221,12 +230,14 @@ export default function BookClub() {
     });
     if (error) { alert("Error: " + error.message); return; }
     setNewPersonal(emptyPersonal);
+    await fetchAll();
     setShowAddPersonal(false);
   }
 
   async function deletePersonalBook(id) {
     if (!confirm("Delete this book?")) return;
     await supabase.from("personal_books").delete().eq("id", id);
+    await fetchAll();
   }
 
   async function getAIRecs() {
