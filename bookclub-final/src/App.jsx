@@ -20,7 +20,7 @@ function avgRating(ratings) {
 async function searchGoogleBooks(query) {
   if (!query || query.length < 3) return [];
   try {
-    const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=6&langRestrict=en`);
+    const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=6&langRestrict=en&key=AIzaSyB0tiDDzhBrrhLGOlR9s-dcRuTm1qbYwY4`);
     const data = await res.json();
     return (data.items || []).map(item => ({
       googleId: item.id,
