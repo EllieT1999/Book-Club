@@ -134,12 +134,15 @@ export default function BookClub() {
 
   useEffect(() => {
     fetchAll();
+    // Refetch after any local action completes immediately
+    // Plus poll every 3 seconds to catch other members' changes
+    const interval = setInterval(fetchAll, 3000);
     const subs = [
       supabase.channel("bc").on("postgres_changes", { event:"*", schema:"public", table:"books" }, fetchAll).subscribe(),
       supabase.channel("sg").on("postgres_changes", { event:"*", schema:"public", table:"suggestions" }, fetchAll).subscribe(),
       supabase.channel("pb").on("postgres_changes", { event:"*", schema:"public", table:"personal_books" }, fetchAll).subscribe(),
     ];
-    return () => subs.forEach(s => s.unsubscribe());
+    return () => { clearInterval(interval); subs.forEach(s => s.unsubscribe()); };
   }, [fetchAll]);
 
   async function addBook() {
@@ -154,12 +157,14 @@ export default function BookClub() {
     });
     if (error) { alert("Error: " + error.message); return; }
     setNewBook(emptyBook);
+    await fetchAll();
     setShowAddBook(false);
   }
 
-  async function deleteBook(id) {
+ async function deleteBook(id) {
     if (!confirm("Delete this book?")) return;
     await supabase.from("books").delete().eq("id", id);
+    await fetchAll();
   }
 
   async function saveEdit() {
@@ -196,12 +201,14 @@ export default function BookClub() {
     });
     if (error) { alert("Error: " + error.message); return; }
     setNewSugg(emptySugg);
+    await fetchAll();
     setShowAddSugg(false);
   }
 
   async function deleteSuggestion(id) {
     if (!confirm("Delete this suggestion?")) return;
     await supabase.from("suggestions").delete().eq("id", id);
+    await fetchAll();
   }
 
   async function toggleVote(sugg) {
@@ -221,12 +228,14 @@ export default function BookClub() {
     });
     if (error) { alert("Error: " + error.message); return; }
     setNewPersonal(emptyPersonal);
+    await fetchAll();
     setShowAddPersonal(false);
   }
 
-  async function deletePersonalBook(id) {
+async function deletePersonalBook(id) {
     if (!confirm("Delete this book?")) return;
     await supabase.from("personal_books").delete().eq("id", id);
+    await fetchAll();
   }
 
   async function getAIRecs() {
