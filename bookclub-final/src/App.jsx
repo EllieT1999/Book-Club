@@ -34,12 +34,57 @@ async function searchGoogleBooks(query) {
 }
 
 function StarRating({ value, onChange, readonly, size = 18 }) {
+  // value is now in 0.5 increments, 0–10
+  // We display 10 stars, each star can be empty, half, or full
+  const [hovered, setHovered] = useState(null);
+  const display = hovered !== null ? hovered : value;
+
+  function getStarType(starIndex) {
+    // starIndex is 1-based (1..10)
+    if (display >= starIndex) return "full";
+    if (display >= starIndex - 0.5) return "half";
+    return "empty";
+  }
+
+  function handleMouseMove(e, starIndex) {
+    if (readonly) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const half = x < rect.width / 2;
+    setHovered(half ? starIndex - 0.5 : starIndex);
+  }
+
+  function handleClick(e, starIndex) {
+    if (readonly) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const half = x < rect.width / 2;
+    onChange?.(half ? starIndex - 0.5 : starIndex);
+  }
+
   return (
-    <div className="star-row">
-      {[...Array(10)].map((_, i) => (
-        <button key={i} className={`star ${i < value ? "filled" : ""} ${readonly ? "readonly" : ""}`}
-          style={{ fontSize: size }} onClick={() => !readonly && onChange?.(i + 1)} tabIndex={readonly ? -1 : 0}>★</button>
-      ))}
+    <div className="star-row" onMouseLeave={() => !readonly && setHovered(null)}>
+      {[...Array(10)].map((_, i) => {
+        const idx = i + 1;
+        const type = getStarType(idx);
+        return (
+          <button
+            key={i}
+            className={`star star-${type} ${readonly ? "readonly" : ""}`}
+            style={{ fontSize: size, position: "relative" }}
+            onMouseMove={e => handleMouseMove(e, idx)}
+            onClick={e => handleClick(e, idx)}
+            tabIndex={readonly ? -1 : 0}
+          >
+            {type === "half" ? (
+              <span className="star-half-wrap">
+                <span className="star-half-filled">★</span>
+                <span className="star-half-empty">★</span>
+              </span>
+            ) : "★"}
+          </button>
+        );
+      })}
       {value > 0 && <span className="star-label">{value}/10</span>}
     </div>
   );
@@ -115,11 +160,21 @@ function CoverUpload({ onUpload, currentCover }) {
 
 export default function BookClub() {
   const [currentUser, setCurrentUser] = useState("");
+  const [personalUser, setPersonalUser] = useState("");
   const [books, setBooks] = useState([]);
   const [personalBooks, setPersonalBooks] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
   const [tab, setTab] = useState("library");
   const [loading, setLoading] = useState(true);
+
+  // Sync personalUser to currentUser when currentUser is first set, but not the reverse
+  const prevCurrentUser = useRef("");
+  useEffect(() => {
+    if (currentUser && !personalUser) {
+      setPersonalUser(currentUser);
+    }
+    prevCurrentUser.current = currentUser;
+  }, [currentUser]);
 
   const [showAddBook, setShowAddBook] = useState(false);
   const [showAddSugg, setShowAddSugg] = useState(false);
@@ -134,8 +189,13 @@ export default function BookClub() {
   const [myComment, setMyComment] = useState("");
   const [editForm, setEditForm] = useState({});
 
-  const [aiRecs, setAiRecs] = useState([]);
+  const [aiRecs, setAiRecs] = useState(() => {
+    try { const s = localStorage.getItem("bc_ai_recs"); return s ? JSON.parse(s) : []; } catch { return []; }
+  });
   const [aiLoading, setAiLoading] = useState(false);
+  const [aiVotes, setAiVotes] = useState(() => {
+    try { const s = localStorage.getItem("bc_ai_votes"); return s ? JSON.parse(s) : {}; } catch { return {}; }
+  });
 
   const emptyBook = { title:"", author:"", genre:"Literary Fiction", myRating:7, cover:null, description:"", googleId:null };
   const emptySugg = { title:"", author:"", genre:"Literary Fiction", reason:"", cover:null, description:"" };
@@ -246,12 +306,12 @@ export default function BookClub() {
 
   async function addPersonalBook() {
     if (!newPersonal.title.trim() || !newPersonal.author.trim()) return;
-    if (!currentUser) { alert("Please select your name first!"); return; }
+    if (!personalUser) { alert("Please select your name first!"); return; }
     const { error } = await supabase.from("personal_books").insert({
       title: newPersonal.title.trim(), author: newPersonal.author.trim(),
       genre: newPersonal.genre, rating: newPersonal.myRating,
       cover: newPersonal.cover || null, description: newPersonal.description || null,
-      member: currentUser,
+      member: personalUser,
     });
     if (error) { alert("Error: " + error.message); return; }
     setNewPersonal(emptyPersonal);
@@ -281,6 +341,7 @@ export default function BookClub() {
   async function getAIRecs() {
     setAiLoading(true);
     setAiRecs([]);
+    setAiVotes({});
 
     // Build personal books summary — only books rated 7+ out of 10
     const highlyRatedPersonal = personalBooks.filter(b => (b.rating || 0) >= 7);
@@ -292,6 +353,15 @@ export default function BookClub() {
 
     // Books already read as a group (for context — don't re-recommend these)
     const alreadyRead = books.map(b => `"${b.title}" by ${b.author}`).join(", ");
+
+    // Books appearing on multiple personal lists (avoid recommending these)
+    const allPersonalTitles = personalBooks.map(b => b.title.toLowerCase().trim());
+    const titleCounts = {};
+    allPersonalTitles.forEach(t => { titleCounts[t] = (titleCounts[t] || 0) + 1; });
+    const multiPersonalBooks = personalBooks
+      .filter(b => titleCounts[b.title.toLowerCase().trim()] > 1)
+      .map(b => `"${b.title}" by ${b.author}`)
+      .filter((v, i, a) => a.indexOf(v) === i);
 
     // Member suggestions as secondary signal
     const suggSummary = suggestions.length
@@ -308,6 +378,9 @@ ${suggSummary}
 
 ALREADY READ AS A GROUP (do NOT recommend these):
 ${alreadyRead || "None yet"}
+
+BOOKS ALREADY READ BY MULTIPLE MEMBERS (do NOT recommend these — they've already read them individually):
+${multiPersonalBooks.length ? multiPersonalBooks.join(", ") : "None"}
 
 YOUR TASK:
 Analyse the crossover in taste between members. Look for:
@@ -352,9 +425,31 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
     setAiLoading(false);
   }
 
+  useEffect(() => {
+    try { localStorage.setItem("bc_ai_recs", JSON.stringify(aiRecs)); } catch {}
+  }, [aiRecs]);
+
+  useEffect(() => {
+    try { localStorage.setItem("bc_ai_votes", JSON.stringify(aiVotes)); } catch {}
+  }, [aiVotes]);
+
+  function toggleAiVote(rank) {
+    if (!currentUser) { alert("Select your name first!"); return; }
+    setAiVotes(prev => {
+      const current = prev[currentUser];
+      if (current === rank) {
+        // unvote
+        const updated = { ...prev };
+        delete updated[currentUser];
+        return updated;
+      }
+      return { ...prev, [currentUser]: rank };
+    });
+  }
+
   const sortedBooks = [...books].sort((a,b) => (parseFloat(avgRating(b.ratings))||0)-(parseFloat(avgRating(a.ratings))||0));
   const sortedSuggs = [...suggestions].sort((a,b) => (b.votes?.length||0)-(a.votes?.length||0));
-  const myPersonalBooks = personalBooks.filter(b => b.member === currentUser);
+  const myPersonalBooks = personalBooks.filter(b => b.member === personalUser);
 
   if (loading) return (
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"'Inter',sans-serif",fontSize:52,fontWeight:900,color:"#C8391B",textTransform:"uppercase",letterSpacing:-2,background:"#F5F2EC"}}>
@@ -529,10 +624,18 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
 
     /* ── STARS ── */
     .star-row{display:flex;align-items:center;gap:1px;flex-wrap:wrap}
-    .star{background:none;border:none;cursor:pointer;color:var(--border);padding:0;transition:color .1s;line-height:1}
-    .star.filled{color:var(--yellow)}
-    .star.readonly{cursor:default}
+    .star{background:none;border:none;cursor:pointer;color:var(--border);padding:0;transition:color .1s;line-height:1;position:relative;display:inline-block}
+    .star.star-full{color:var(--yellow)}
+    .star.star-empty{color:var(--border)}
+    .star.star-half{color:var(--border)}
+    .star.readonly{cursor:default;pointer-events:none}
     .star-label{font-size:13px;font-weight:600;margin-left:6px;color:var(--red);font-family:var(--D)}
+    .star-half-wrap{position:relative;display:inline-block;line-height:1}
+    .star-half-filled{position:absolute;left:0;top:0;width:50%;overflow:hidden;color:var(--yellow);display:inline-block;white-space:nowrap}
+    .star-half-empty{color:var(--border);display:inline-block}
+
+    /* ── TAB DESCRIPTIONS ── */
+    .tab-desc{font-size:13px;color:var(--mid);margin-bottom:22px;line-height:1.6;max-width:580px;padding:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:6px;border-left:3px solid var(--yellow)}
 
     /* ── SUGGESTIONS ── */
     .slist{display:flex;flex-direction:column;gap:2px}
@@ -588,6 +691,14 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
     .rec-member-row{display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
     .rec-member-name{font-size:11px;font-weight:700;color:var(--black);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
     .rec-member-reason{font-size:11px;color:var(--mid);font-style:italic}
+    .rec-vote-col{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 12px;border-left:1px solid var(--border);flex-shrink:0;gap:3px;min-width:54px}
+    .rec-vote-btn{background:none;border:1.5px solid var(--border);border-radius:6px;padding:5px 9px;cursor:pointer;font-family:var(--D);font-size:16px;font-weight:900;color:var(--mid);transition:all .12s;width:100%}
+    .rec-vote-btn.voted{background:var(--red);border-color:var(--red);color:#fff}
+    .rec-vote-btn:hover:not(.voted){border-color:var(--black);color:var(--black)}
+    .rec-vote-count{font-family:var(--D);font-size:18px;font-weight:900;color:var(--black);line-height:1}
+    .rec-vote-label{font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--mid)}
+    .rec-refresh-row{display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap}
+    .rec-refresh-note{font-size:12px;color:var(--mid);font-style:italic}
 
     /* ── FORMS ── */
     .addbtn{display:flex;align-items:center;gap:7px;background:none;border:1px dashed var(--border);border-radius:6px;padding:11px 16px;width:100%;cursor:pointer;color:var(--mid);font-family:var(--B);font-size:13px;transition:all .12s;margin-top:10px}
@@ -669,10 +780,10 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
       {/* ── SLIM HERO ── */}
       <div className="hero">
         <div className="hero-title">
-          {tab==="library"&&<><em>Our</em> Reading List</>}
+          {tab==="library"&&<><em>Booked In</em> Library</>}
           {tab==="suggestions"&&<>What&apos;s <em>Next?</em></>}
-          {tab==="recommend"&&<>AI <em>Top 10</em></>}
-          {tab==="personal"&&<><em>My</em> Books</>}
+          {tab==="recommend"&&<>AI <em>Recommendations</em></>}
+          {tab==="personal"&&<><em>Personal</em> Library</>}
         </div>
         <div className="hero-stats">
           <div className="hstat"><div className="hstat-n">{books.length}</div><div className="hstat-l">Read</div></div>
@@ -683,7 +794,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
 
       {/* ── TABS ── */}
       <div className="tabs">
-        {[["library","📚 Library"],["suggestions","💡 Suggestions"],["recommend","✨ AI Top 10"],["personal","👤 My Books"]].map(([id,lbl])=>(
+        {[["library","📚 Booked In Library"],["suggestions","💡 Suggestions"],["recommend","✨ AI Recommendations"],["personal","👤 Personal Library"]].map(([id,lbl])=>(
           <button key={id} className={`tbtn ${tab===id?"on":""}`} onClick={()=>setTab(id)}>{lbl}</button>
         ))}
       </div>
@@ -693,6 +804,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
         {/* ── LIBRARY ── */}
         {tab==="library"&&(
           <div>
+            <p className="tab-desc">Every book the club has read together, ranked by average member rating. Rate books, leave notes, and keep the record straight.</p>
             <div className="section-hdr">
               <div className="section-title">Books we've read</div>
               <div className="section-count">{books.length} books</div>
@@ -773,6 +885,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
         {/* ── SUGGESTIONS ── */}
         {tab==="suggestions"&&(
           <div>
+            <p className="tab-desc">Suggest books you'd love the club to read next. Vote for your favourites — the most-voted ideas rise to the top.</p>
             <div className="section-hdr">
               <div className="section-title">Suggestions</div>
               <div className="section-count">{suggestions.length} ideas</div>
@@ -829,18 +942,20 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
           </div>
         )}
 
-        {/* ── AI TOP 10 ── */}
         {tab==="recommend"&&(
           <div>
-            <div className="section-hdr"><div className="section-title">AI Top 10</div></div>
-            <p className="ai-intro">Claude analyses everyone's personal reading lists (books rated 7+/10) to find crossover in taste — then picks the 10 books most likely to be loved by the whole group. Member suggestions also feed in as a secondary signal.</p>
+            <div className="section-hdr"><div className="section-title">AI Recommendations</div></div>
+            <p className="tab-desc">Claude analyses everyone's personal reading lists (books rated 7+/10) to find crossover in taste — then picks the books most likely to be loved by the whole group. Once generated, the list stays until Ellie refreshes it. Everyone gets one vote for the book they want to read next.</p>
             {personalBooks.filter(b=>(b.rating||0)>=7).length < 3 && (
               <div className="ai-data-warning">💡 The more books everyone adds to their personal reading list with ratings, the better the recommendations will be!</div>
             )}
             {currentUser===ADMIN?(
-              <button className="aibtn" onClick={getAIRecs} disabled={aiLoading}>
-                {aiLoading?"Analysing everyone's taste…":"✦ Generate Top 10"}
-              </button>
+              <div className="rec-refresh-row">
+                <button className="aibtn" onClick={getAIRecs} disabled={aiLoading}>
+                  {aiLoading?"Analysing everyone's taste…":aiRecs.length?"🔄 Refresh Top 10":"✦ Generate Top 10"}
+                </button>
+                {aiRecs.length>0&&!aiLoading&&<span className="rec-refresh-note">Results are saved until you refresh</span>}
+              </div>
             ):(
               <div className="ai-view-only"><strong>Only Ellie can generate this list.</strong> Ask her to run it at your next meeting!</div>
             )}
@@ -849,54 +964,79 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
             )}
             {aiRecs.length>0&&!aiRecs[0]?.error&&(
               <div className="recs-list">
-                {aiRecs.map(rec=>(
-                  <div key={rec.rank} className="rec-card">
-                    <div className="rec-rank-col">
-                      <div className={`rec-rank-num ${rec.rank<=3?"gold":""}`}>{rec.rank}</div>
-                    </div>
-                    {rec.cover?<img src={rec.cover} alt="" className="rec-cover"/>:<div className="rec-cover-ph">📖</div>}
-                    <div className="rec-body">
-                      <div className="rec-title">{rec.title}</div>
-                      <div className="rec-author">by {rec.author} · {rec.genre}
-                        {rec.fromSuggestions&&<span className="rec-from">from suggestions</span>}
+                {aiRecs.map(rec=>{
+                  const voteCount = Object.values(aiVotes).filter(v=>v===rec.rank).length;
+                  const myVote = aiVotes[currentUser];
+                  const iVoted = myVote===rec.rank;
+                  return (
+                    <div key={rec.rank} className="rec-card">
+                      <div className="rec-rank-col">
+                        <div className={`rec-rank-num ${rec.rank<=3?"gold":""}`}>{rec.rank}</div>
                       </div>
-                      {rec.blurb&&<div className="rec-blurb">{rec.blurb}</div>}
-                      <div className="rec-why">{rec.whyThisBook}</div>
-                      {rec.tasteOverlap&&<div className="rec-overlap">✦ {rec.tasteOverlap}</div>}
-                      {rec.memberMatch&&rec.memberMatch.length>0&&(
-                        <div className="rec-members">
-                          {rec.memberMatch.map((m,i)=>(
-                            <div key={i} className="rec-member-row">
-                              <span className="rec-member-name">{m.name}</span>
-                              <span className="rec-member-reason">{m.reason}</span>
-                            </div>
-                          ))}
+                      {rec.cover?<img src={rec.cover} alt="" className="rec-cover"/>:<div className="rec-cover-ph">📖</div>}
+                      <div className="rec-body">
+                        <div className="rec-title">{rec.title}</div>
+                        <div className="rec-author">by {rec.author} · {rec.genre}
+                          {rec.fromSuggestions&&<span className="rec-from" style={{marginLeft:6}}>from suggestions</span>}
                         </div>
-                      )}
-                      <div className="rec-footer">
-                        <div className="rec-match">{rec.matchScore}% group match</div>
+                        {rec.blurb&&<div className="rec-blurb">{rec.blurb}</div>}
+                        <div className="rec-why">{rec.whyThisBook}</div>
+                        {rec.tasteOverlap&&<div className="rec-overlap">✦ {rec.tasteOverlap}</div>}
+                        {rec.memberMatch&&rec.memberMatch.length>0&&(
+                          <div className="rec-members">
+                            {rec.memberMatch.map((m,i)=>(
+                              <div key={i} className="rec-member-row">
+                                <span className="rec-member-name">{m.name}</span>
+                                <span className="rec-member-reason">{m.reason}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="rec-footer">
+                          <div className="rec-match">{rec.matchScore}% group match</div>
+                        </div>
+                      </div>
+                      <div className="rec-vote-col">
+                        <div className="rec-vote-count">{voteCount}</div>
+                        <div className="rec-vote-label">vote{voteCount!==1?"s":""}</div>
+                        {currentUser&&(
+                          <button
+                            className={`rec-vote-btn ${iVoted?"voted":""}`}
+                            onClick={()=>toggleAiVote(rec.rank)}
+                            title={iVoted?"Remove vote":"Vote for this book"}
+                          >{iVoted?"✓":"▲"}</button>
+                        )}
                       </div>
                     </div>
+                  );
+                })}
+                {Object.keys(aiVotes).length>0&&(
+                  <div style={{marginTop:14,padding:"10px 14px",background:"var(--card)",border:"1px solid var(--border)",borderRadius:6,fontSize:12}}>
+                    <strong style={{fontSize:11,textTransform:"uppercase",letterSpacing:".04em"}}>Votes so far:</strong>
+                    <span style={{color:"var(--mid)",marginLeft:8}}>
+                      {Object.entries(aiVotes).map(([member,rank])=>`${member} → #${rank}`).join(" · ")}
+                    </span>
                   </div>
-                ))}
+                )}
               </div>
             )}
             {aiRecs[0]?.error&&<div className="aierr">Couldn't get recommendations — try again in a moment.</div>}
           </div>
         )}
 
-        {/* ── MY BOOKS (PERSONAL) ── */}
+        {/* ── PERSONAL LIBRARY ── */}
         {tab==="personal"&&(
           <div>
             <div className="section-hdr">
-              <div className="section-title">Personal reading lists</div>
+              <div className="section-title">Personal Library</div>
             </div>
-            {/* Member selector */}
+            <p className="tab-desc">Everyone's personal reading list — books you've read outside of book club. Add your own reads with ratings; the AI uses highly-rated books (7+/10) to power its recommendations.</p>
+            {/* Member selector — independent from the global user selector */}
             <div style={{marginBottom:20}}>
               <select
                 className="user-dropdown"
-                value={currentUser}
-                onChange={e=>setCurrentUser(e.target.value)}
+                value={personalUser}
+                onChange={e=>setPersonalUser(e.target.value)}
                 style={{minWidth:160}}
               >
                 <option value="">Select a member…</option>
@@ -904,12 +1044,12 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
               </select>
             </div>
 
-            {!currentUser&&<div className="need-name">Select a member above to see their personal reading list.</div>}
+            {!personalUser&&<div className="need-name">Select a member above to see their personal reading list.</div>}
 
-            {currentUser&&(
+            {personalUser&&(
               <>
                 <div style={{marginBottom:16}}>
-                  <strong style={{fontFamily:"var(--D)",fontSize:18,textTransform:"uppercase",letterSpacing:"-.1px"}}>{currentUser}'s personal reads</strong>
+                  <strong style={{fontFamily:"var(--D)",fontSize:18,textTransform:"uppercase",letterSpacing:"-.1px"}}>{personalUser}'s personal reads</strong>
                   <span style={{fontSize:12,color:"var(--mid)",marginLeft:8}}>{myPersonalBooks.length} books</span>
                 </div>
                 {myPersonalBooks.length===0&&<div className="personal-empty">Nothing added yet — add your first personal read below!</div>}
@@ -958,7 +1098,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
                     </div>
                   </div>
                 ):(
-                  <button className="addbtn" onClick={()=>setShowAddPersonal(true)}>＋ Add to {currentUser}'s reading list</button>
+                  <button className="addbtn" onClick={()=>setShowAddPersonal(true)}>＋ Add to {personalUser}'s reading list</button>
                 )}
               </>
             )}
