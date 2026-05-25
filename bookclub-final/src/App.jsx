@@ -483,7 +483,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
       const res = await fetch("/api/claude", {
         method: "POST",
         headers: { "Content-Type":"application/json" },
-        body: JSON.stringify({ model:"claude-sonnet-4-6", max_tokens:3000, messages:[{ role:"user", content:prompt }] })
+        body: JSON.stringify({ model:"claude-sonnet-4-6", max_tokens:6000, messages:[{ role:"user", content:prompt }] })
       });
       const data = await res.json();
       if (!res.ok) {
@@ -498,14 +498,24 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
         setAiLoading(false);
         return;
       }
-      const parsed = JSON.parse(text.replace(/```json|```/g,"").trim());
+      // Extract the JSON array robustly - find first [ to last ]
+      const jsonStart = text.indexOf("[");
+      const jsonEnd = text.lastIndexOf("]");
+      if (jsonStart === -1 || jsonEnd === -1) {
+        setAiRecs([{ error: true, msg: "Could not find JSON in response" }]);
+        setAiLoading(false);
+        return;
+      }
+      const jsonStr = text.slice(jsonStart, jsonEnd + 1);
+      const parsed = JSON.parse(jsonStr);
       const enriched = await Promise.all(parsed.map(async rec => {
         const results = await searchGoogleBooks(`${rec.title} ${rec.author}`);
         return { ...rec, cover: results[0]?.cover || null };
       }));
       setAiRecs(enriched);
     } catch(e) {
-      console.error("getAIRecs failed:", e);
+      console.error("getAIRecs failed:", e.message);
+      console.error("Full error:", e);
       setAiRecs([{ error: true, msg: e.message }]);
     }
     setAiLoading(false);
