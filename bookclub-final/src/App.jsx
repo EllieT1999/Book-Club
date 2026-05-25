@@ -609,6 +609,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
     .bcomment{font-size:12px;background:var(--bg);border-left:2px solid var(--yellow);padding:4px 8px;border-radius:0 3px 3px 0;color:var(--mid)}
     .bcomment strong{color:var(--black);margin-right:4px;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
     .addedbylbl{font-size:10px;color:var(--border);margin-top:3px}
+    .bdesc{font-size:12px;color:var(--mid);margin-top:6px;line-height:1.55;font-style:italic;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
     .bright{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
     .avgscore{font-family:var(--D);font-size:34px;font-weight:900;line-height:1;color:var(--black)}
     .avglbl{font-size:9px;color:var(--mid);text-transform:uppercase;letter-spacing:.08em;text-align:right}
@@ -804,7 +805,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
         {/* ── LIBRARY ── */}
         {tab==="library"&&(
           <div>
-            <p className="tab-desc">Every book the club has read together, ranked by average member rating. Rate books, leave notes, and keep the record straight.</p>
+            <p className="tab-desc">Every book we have ready together, ranked by average rating</p>
             <div className="section-hdr">
               <div className="section-title">Books we've read</div>
               <div className="section-count">{books.length} books</div>
@@ -819,6 +820,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
                     <div className="btitle">{book.title}</div>
                     <div className="bauthor">{book.author}</div>
                     <span className="bgenre">{book.genre}</span>
+                    {book.description&&<div className="bdesc">{book.description}</div>}
                     <div className="bratings">
                       {Object.entries(book.ratings||{}).map(([m,r])=>(
                         <div key={m} className="mrat"><span className="who2">{m}</span><span className="sc">{r}/10</span></div>
@@ -839,16 +841,16 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
                   <div className="bright">
                     <div><div className="avgscore">{avgRating(book.ratings)||"—"}</div><div className="avglbl">avg/10</div></div>
                     <div className="btn-row">
-                      {currentUser&&!(book.ratings||{})[currentUser]&&(
-                        <button className="ratebtn" onClick={()=>{setRateModal(book);setMyRating(7)}}>Rate</button>
-                      )}
                       {currentUser&&(
-                        <button className="commentbtn" onClick={()=>{setCommentModal(book);setMyComment((book.comments||{})[currentUser]||"")}}>
-                          {(book.comments||{})[currentUser]?"Edit note":"Note"}
+                        <button className="ratebtn" onClick={()=>{
+                          setRateModal(book);
+                          setMyRating((book.ratings||{})[currentUser]||7);
+                          setMyComment((book.comments||{})[currentUser]||"");
+                        }}>
+                          {(book.ratings||{})[currentUser]?"Rated ✓":"Rate"}
                         </button>
                       )}
-                      <button className="iconbtn" onClick={()=>{setEditModal(book);setEditForm({title:book.title,author:book.author,genre:book.genre,cover:book.cover,description:book.description})}}>✏️</button>
-                      <button className="delbtn" onClick={()=>deleteBook(book.id)}>✕</button>
+                      <button className="iconbtn" onClick={()=>{setEditModal(book);setEditForm({title:book.title,author:book.author,genre:book.genre,cover:book.cover,description:book.description||""})}}>Edit</button>
                     </div>
                   </div>
                 </div>
@@ -885,7 +887,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
         {/* ── SUGGESTIONS ── */}
         {tab==="suggestions"&&(
           <div>
-            <p className="tab-desc">Suggest books you'd love the club to read next. Vote for your favourites — the most-voted ideas rise to the top.</p>
+            <p className="tab-desc">Suggest books you'd love to read next and vote for your favourites</p>
             <div className="section-hdr">
               <div className="section-title">Suggestions</div>
               <div className="section-count">{suggestions.length} ideas</div>
@@ -945,7 +947,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
         {tab==="recommend"&&(
           <div>
             <div className="section-hdr"><div className="section-title">AI Recommendations</div></div>
-            <p className="tab-desc">Claude analyses everyone's personal reading lists (books rated 7+/10) to find crossover in taste — then picks the books most likely to be loved by the whole group. Once generated, the list stays until Ellie refreshes it. Everyone gets one vote for the book they want to read next.</p>
+            <p className="tab-desc">Claude analyses everyone's suggestions and personal reading lists (books rated 7-10) to find crossover in taste — then picks the books most likely to be loved by the whole group</p>
             {personalBooks.filter(b=>(b.rating||0)>=7).length < 3 && (
               <div className="ai-data-warning">💡 The more books everyone adds to their personal reading list with ratings, the better the recommendations will be!</div>
             )}
@@ -1030,7 +1032,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
             <div className="section-hdr">
               <div className="section-title">Personal Library</div>
             </div>
-            <p className="tab-desc">Everyone's personal reading list — books you've read outside of book club. Add your own reads with ratings; the AI uses highly-rated books (7+/10) to power its recommendations.</p>
+            <p className="tab-desc">Everyone's personal reading list — books you've read outside of book club. Add your own reads with ratings</p>
             {/* Member selector — independent from the global user selector */}
             <div style={{marginBottom:20}}>
               <select
@@ -1106,33 +1108,27 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
         )}
       </div>
 
-      {/* Rate modal */}
+      {/* Rate & Note modal */}
       {rateModal&&(
         <div className="overlay" onClick={()=>setRateModal(null)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
             <h3>{rateModal.title}</h3>
-            <p>by {rateModal.author} · rating as {currentUser}</p>
-            <div className="rlbl">Your Score Out of 10</div>
+            <p>by {rateModal.author} · as {currentUser}</p>
+            <div className="rlbl" style={{marginBottom:8}}>Your Score Out of 10</div>
             <StarRating value={myRating} onChange={setMyRating}/>
-            <div className="factions" style={{marginTop:18}}>
-              <button className="bprimary" onClick={()=>rateBook(rateModal.id)}>Save</button>
-              <button className="bcancel" onClick={()=>setRateModal(null)}>Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Comment modal */}
-      {commentModal&&(
-        <div className="overlay" onClick={()=>setCommentModal(null)}>
-          <div className="modal" onClick={e=>e.stopPropagation()}>
-            <h3>{commentModal.title}</h3>
-            <p>Your thoughts · as {currentUser}</p>
-            <div className="rlbl">Your Note</div>
+            <div className="rlbl" style={{marginTop:16,marginBottom:6}}>Your Note <span style={{fontWeight:400,textTransform:"none",letterSpacing:0}}>(optional)</span></div>
             <textarea className="modal-textarea" value={myComment} onChange={e=>setMyComment(e.target.value)} placeholder="What did you think? Any favourite moments?"/>
             <div className="factions" style={{marginTop:14}}>
-              <button className="bprimary" onClick={()=>saveComment(commentModal.id)}>Save Note</button>
-              <button className="bcancel" onClick={()=>setCommentModal(null)}>Cancel</button>
+              <button className="bprimary" onClick={async()=>{
+                const book = books.find(b=>b.id===rateModal.id);
+                const updRatings = {...(book.ratings||{}), [currentUser]: myRating};
+                const updComments = {...(book.comments||{}), [currentUser]: myComment};
+                await supabase.from("books").update({ratings:updRatings, comments:updComments}).eq("id",rateModal.id);
+                await fetchAll();
+                setRateModal(null);
+                setMyComment("");
+              }}>Save</button>
+              <button className="bcancel" onClick={()=>{setRateModal(null);setMyComment("");}}>Cancel</button>
             </div>
           </div>
         </div>
@@ -1147,10 +1143,25 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
               <div className="fgrp"><label>Title</label><input value={editForm.title||""} onChange={e=>setEditForm(f=>({...f,title:e.target.value}))}/></div>
               <div className="fgrp"><label>Author</label><input value={editForm.author||""} onChange={e=>setEditForm(f=>({...f,author:e.target.value}))}/></div>
               <div className="fgrp"><label>Genre</label><select value={editForm.genre||"Fiction"} onChange={e=>setEditForm(f=>({...f,genre:e.target.value}))}>{GENRES.map(g=><option key={g}>{g}</option>)}</select></div>
+              <div className="fgrp">
+                <label>Blurb / Description</label>
+                <textarea value={editForm.description||""} onChange={e=>setEditForm(f=>({...f,description:e.target.value}))} placeholder="A short description of the book…" style={{minHeight:80,resize:"vertical",padding:"8px 10px",border:"1px solid var(--border)",borderRadius:5,fontFamily:"var(--B)",fontSize:13,outline:"none",width:"100%"}}/>
+                <button
+                  type="button"
+                  className="cover-upload-btn"
+                  style={{marginTop:5,alignSelf:"flex-start"}}
+                  onClick={async()=>{
+                    const results = await searchGoogleBooks(`${editForm.title} ${editForm.author}`);
+                    if (results[0]?.description) setEditForm(f=>({...f,description:results[0].description}));
+                    else alert("No description found — try editing the title/author first.");
+                  }}
+                >🔍 Fetch from Google Books</button>
+              </div>
             </div>
             <div className="factions">
               <button className="bprimary" onClick={saveEdit}>Save</button>
               <button className="bcancel" onClick={()=>setEditModal(null)}>Cancel</button>
+              <button className="delbtn" style={{marginLeft:"auto"}} onClick={()=>{setEditModal(null);deleteBook(editModal.id);}}>Delete book</button>
             </div>
           </div>
         </div>
