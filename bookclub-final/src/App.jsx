@@ -479,11 +479,23 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
   "matchScore": 85
 }]`;
 
+    let promptBody;
+    try {
+      promptBody = JSON.stringify({ model:"claude-sonnet-4-6", max_tokens:6000, messages:[{ role:"user", content:prompt }] });
+    } catch(e) {
+      setAiRecs([{ error: true, msg: `Failed to build request — bad character in your data: ${e.message}` }]);
+      setAiLoading(false);
+      return;
+    }
+
+    // If we reach here, prompt built successfully
+    setAiRecs([{ error: true, msg: `DEBUG: Prompt built OK (${promptBody.length} chars). Now calling /api/claude...` }]);
+
     try {
       const res = await fetch("/api/claude", {
         method: "POST",
         headers: { "Content-Type":"application/json" },
-        body: JSON.stringify({ model:"claude-sonnet-4-6", max_tokens:6000, messages:[{ role:"user", content:prompt }] })
+        body: promptBody,
       });
 
       let data;
@@ -542,7 +554,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
       }));
       setAiRecs(enriched);
     } catch(e) {
-      setAiRecs([{ error: true, msg: `Unexpected error: ${e.message}` }]);
+      setAiRecs([{ error: true, msg: `Unexpected error at: ${e.stack ? e.stack.split('\n').slice(0,3).join(' | ') : e.message}` }]);
     }
     setAiLoading(false);
   }
