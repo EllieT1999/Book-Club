@@ -9,20 +9,20 @@ const GENRES = ["Literary Fiction","Fiction","Memoir","Non-Fiction","Mystery","S
 const MEMBERS = ["Ali","Bec","Cassie","Chloe","Chloe VN","Ellie","Emma","Erin","Evie","Gabby","Georgie","Hannah","Harriet","Izzy","Jorgia","Lara","Lillay","Maddie","Molly","Pip","Rachel","Ruby","Sanyogita","Soph","Tash"];
 const ADMIN = "Ellie";
 
-function avgRating(ratings) {
-  const vals = Object.values(ratings || {}).filter(v => v != null);
-  if (!vals.length) return null;
-  return (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1);
-}
-
-// personal_books stores rating as integer*2 to support half-stars (e.g. 6.5 → 13)
-// Old data was stored as plain integers (7, 8, etc.) so we detect by value > 10
+// personal_books.rating and books.ratings values are stored as integer*2 to support
+// half-stars (e.g. 6.5 → 13). Old data was plain integers (7, 8 etc), detected by value ≤ 10.
 function fromStoredRating(r) {
-  if (!r && r !== 0) return null;
+  if (r == null) return null;
   return r > 10 ? r / 2 : r;
 }
 function toStoredRating(v) {
   return Math.round((v || 0) * 2);
+}
+
+function avgRating(ratings) {
+  const vals = Object.values(ratings || {}).filter(v => v != null).map(fromStoredRating);
+  if (!vals.length) return null;
+  return (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1);
 }
 
 async function searchGoogleBooks(query) {
@@ -280,7 +280,7 @@ export default function BookClub() {
     if (!currentUser) { alert("Please select your name first!"); return; }
     const { error } = await supabase.from("books").insert({
       title: newBook.title.trim(), author: newBook.author.trim(),
-      genre: newBook.genre, ratings: { [currentUser]: newBook.myRating },
+      genre: newBook.genre, ratings: { [currentUser]: toStoredRating(newBook.myRating) },
       comments: {}, cover: newBook.cover || null,
       description: newBook.description || null,
       google_id: newBook.googleId || null, added_by: currentUser,
@@ -308,7 +308,7 @@ export default function BookClub() {
 
   async function rateBook(bookId) {
     const book = books.find(b => b.id === bookId);
-    const updated = { ...(book.ratings || {}), [currentUser]: myRating };
+    const updated = { ...(book.ratings || {}), [currentUser]: toStoredRating(myRating) };
     await supabase.from("books").update({ ratings: updated }).eq("id", bookId);
     await fetchAll();
     setRateModal(null);
@@ -900,7 +900,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
                     {book.description&&<BlurbText text={book.description}/>}
                     <div className="bratings">
                       {Object.entries(book.ratings||{}).map(([m,r])=>(
-                        <div key={m} className="mrat"><span className="who2">{m}</span><span className="sc">{r}/10</span></div>
+                        <div key={m} className="mrat"><span className="who2">{m}</span><span className="sc">{fromStoredRating(r)}/10</span></div>
                       ))}
                       {MEMBERS.filter(m=>!(book.ratings||{})[m]).map(m=>(
                         <div key={m} className="mrat unrated"><span className="who2">{m}</span><span className="sc">–</span></div>
@@ -921,10 +921,10 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
                       <button className="ratebtn" onClick={()=>{
                         if (!currentUser) return;
                         setRateModal(book);
-                        setMyRating((book.ratings||{})[currentUser]||7);
+                        setMyRating(fromStoredRating((book.ratings||{})[currentUser])||7);
                         setMyComment((book.comments||{})[currentUser]||"");
                       }}>
-                        {currentUser&&(book.ratings||{})[currentUser]?"Rated ✓":"Rate"}
+                        {currentUser&&(book.ratings||{})[currentUser]!=null?"Rated ✓":"Rate"}
                       </button>
                       <button className="iconbtn" onClick={()=>{setEditModal(book);setEditForm({title:book.title,author:book.author,genre:book.genre,cover:book.cover,description:book.description||""})}}>Edit</button>
                     </div>
@@ -932,7 +932,6 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
                 </div>
               ))}
             </div>
-            {!currentUser&&<div className="need-name" style={{display:"none"}}/>}
             {currentUser&&(showAddBook?(
               <div className="aform">
                 <div className="fgrp" style={{position:"relative"}}>
@@ -1199,7 +1198,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
             <div className="factions" style={{marginTop:14}}>
               <button className="bprimary" onClick={async()=>{
                 const book = books.find(b=>b.id===rateModal.id);
-                const updRatings = {...(book.ratings||{}), [currentUser]: myRating};
+                const updRatings = {...(book.ratings||{}), [currentUser]: toStoredRating(myRating)};
                 const updComments = {...(book.comments||{}), [currentUser]: myComment};
                 await supabase.from("books").update({ratings:updRatings, comments:updComments}).eq("id",rateModal.id);
                 await fetchAll();
