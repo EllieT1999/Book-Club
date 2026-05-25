@@ -218,6 +218,8 @@ export default function BookClub() {
   const [showAddPersonal, setShowAddPersonal] = useState(false);
   const [editModal, setEditModal] = useState(null);
   const [editPersonalModal, setEditPersonalModal] = useState(null);
+  const [editSuggModal, setEditSuggModal] = useState(null);
+  const [editSuggForm, setEditSuggForm] = useState({});
   const [commentPersonalModal, setCommentPersonalModal] = useState(null);
   const [personalComment, setPersonalComment] = useState("");
   const [rateModal, setRateModal] = useState(null);
@@ -366,6 +368,15 @@ export default function BookClub() {
     await supabase.from("personal_books").update(updates).eq("id", id);
     await fetchAll();
     setEditPersonalModal(null);
+  }
+
+  async function saveSuggEdit() {
+    await supabase.from("suggestions").update({
+      title: editSuggForm.title, author: editSuggForm.author,
+      genre: editSuggForm.genre, description: editSuggForm.description,
+    }).eq("id", editSuggModal.id);
+    await fetchAll();
+    setEditSuggModal(null);
   }
 
   async function savePersonalComment(id) {
@@ -958,6 +969,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
                         <span className="vlbl">{s.votes?.includes(currentUser)?"✓":"Vote"}</span>
                       </button>
                     )}
+                    <button className="iconbtn" onClick={()=>{setEditSuggModal(s);setEditSuggForm({title:s.title,author:s.author,genre:s.genre,description:s.description||""});}}>Edit</button>
                     <button className="delbtn" onClick={()=>deleteSuggestion(s.id)}>✕</button>
                   </div>
                 </div>
@@ -1231,12 +1243,29 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
             <h3>Edit Book</h3>
             <p>Editing your personal entry for this book</p>
             <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:14}}>
-              <div className="fgrp"><label>Title</label><input defaultValue={editPersonalModal.title||""} id="pedit-title"/></div>
-              <div className="fgrp"><label>Author</label><input defaultValue={editPersonalModal.author||""} id="pedit-author"/></div>
+              <div className="fgrp"><label>Title</label><input value={editPersonalModal.title||""} onChange={e=>setEditPersonalModal(m=>({...m,title:e.target.value}))}/></div>
+              <div className="fgrp"><label>Author</label><input value={editPersonalModal.author||""} onChange={e=>setEditPersonalModal(m=>({...m,author:e.target.value}))}/></div>
               <div className="fgrp"><label>Genre</label>
-                <select defaultValue={editPersonalModal.genre||"Fiction"} id="pedit-genre">
+                <select value={editPersonalModal.genre||"Fiction"} onChange={e=>setEditPersonalModal(m=>({...m,genre:e.target.value}))}>
                   {GENRES.map(g=><option key={g}>{g}</option>)}
                 </select>
+              </div>
+              <div className="fgrp">
+                <label>Blurb / Description</label>
+                <textarea value={editPersonalModal.description||""} onChange={e=>setEditPersonalModal(m=>({...m,description:e.target.value}))} placeholder="A short description of the book…" style={{minHeight:80,resize:"vertical",padding:"8px 10px",border:"1px solid var(--border)",borderRadius:5,fontFamily:"var(--B)",fontSize:13,outline:"none",width:"100%"}}/>
+                <button type="button" className="cover-upload-btn" style={{marginTop:5}}
+                  onClick={async(e)=>{
+                    const btn = e.currentTarget;
+                    btn.textContent = "Fetching…"; btn.disabled = true;
+                    const results = await searchGoogleBooks(`${editPersonalModal.title} ${editPersonalModal.author}`);
+                    if (results[0]?.description) {
+                      btn.textContent = "Summarising…";
+                      const summary = await summariseDescription(results[0].description, editPersonalModal.title, editPersonalModal.author);
+                      setEditPersonalModal(m=>({...m, description: summary}));
+                    } else { alert("No description found — try editing the title/author first."); }
+                    btn.textContent = "🔍 Fetch & summarise from Google Books"; btn.disabled = false;
+                  }}
+                >🔍 Fetch & summarise from Google Books</button>
               </div>
               <div>
                 <div className="rlbl">Your Rating</div>
@@ -1245,12 +1274,14 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
             </div>
             <div className="factions">
               <button className="bprimary" onClick={()=>savePersonalEdit(editPersonalModal.id,{
-                title: document.getElementById("pedit-title").value,
-                author: document.getElementById("pedit-author").value,
-                genre: document.getElementById("pedit-genre").value,
+                title: editPersonalModal.title,
+                author: editPersonalModal.author,
+                genre: editPersonalModal.genre,
+                description: editPersonalModal.description,
                 rating: editPersonalModal.rating,
               })}>Save</button>
               <button className="bcancel" onClick={()=>setEditPersonalModal(null)}>Cancel</button>
+              <button className="delbtn" style={{marginLeft:"auto"}} onClick={()=>{setEditPersonalModal(null);deletePersonalBook(editPersonalModal.id);}}>Delete</button>
             </div>
           </div>
         </div>
@@ -1267,6 +1298,42 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
             <div className="factions" style={{marginTop:14}}>
               <button className="bprimary" onClick={()=>savePersonalComment(commentPersonalModal.id)}>Save</button>
               <button className="bcancel" onClick={()=>setCommentPersonalModal(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Suggestion edit modal */}
+      {editSuggModal&&(
+        <div className="overlay" onClick={()=>setEditSuggModal(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <h3>Edit Suggestion</h3>
+            <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:14}}>
+              <div className="fgrp"><label>Title</label><input value={editSuggForm.title||""} onChange={e=>setEditSuggForm(f=>({...f,title:e.target.value}))}/></div>
+              <div className="fgrp"><label>Author</label><input value={editSuggForm.author||""} onChange={e=>setEditSuggForm(f=>({...f,author:e.target.value}))}/></div>
+              <div className="fgrp"><label>Genre</label><select value={editSuggForm.genre||"Fiction"} onChange={e=>setEditSuggForm(f=>({...f,genre:e.target.value}))}>{GENRES.map(g=><option key={g}>{g}</option>)}</select></div>
+              <div className="fgrp">
+                <label>Blurb / Description</label>
+                <textarea value={editSuggForm.description||""} onChange={e=>setEditSuggForm(f=>({...f,description:e.target.value}))} placeholder="A short description of the book…" style={{minHeight:80,resize:"vertical",padding:"8px 10px",border:"1px solid var(--border)",borderRadius:5,fontFamily:"var(--B)",fontSize:13,outline:"none",width:"100%"}}/>
+                <button type="button" className="cover-upload-btn" style={{marginTop:5}}
+                  onClick={async(e)=>{
+                    const btn = e.currentTarget;
+                    btn.textContent = "Fetching…"; btn.disabled = true;
+                    const results = await searchGoogleBooks(`${editSuggForm.title} ${editSuggForm.author}`);
+                    if (results[0]?.description) {
+                      btn.textContent = "Summarising…";
+                      const summary = await summariseDescription(results[0].description, editSuggForm.title, editSuggForm.author);
+                      setEditSuggForm(f=>({...f, description: summary}));
+                    } else { alert("No description found — try editing the title/author first."); }
+                    btn.textContent = "🔍 Fetch & summarise from Google Books"; btn.disabled = false;
+                  }}
+                >🔍 Fetch & summarise from Google Books</button>
+              </div>
+            </div>
+            <div className="factions">
+              <button className="bprimary" onClick={saveSuggEdit}>Save</button>
+              <button className="bcancel" onClick={()=>setEditSuggModal(null)}>Cancel</button>
+              <button className="delbtn" style={{marginLeft:"auto"}} onClick={()=>{setEditSuggModal(null);deleteSuggestion(editSuggModal.id);}}>Delete</button>
             </div>
           </div>
         </div>
