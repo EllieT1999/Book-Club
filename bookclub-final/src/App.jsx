@@ -481,16 +481,14 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
 
     let promptBody;
     try {
-      promptBody = JSON.stringify({ model:"claude-sonnet-4-6", max_tokens:6000, messages:[{ role:"user", content:prompt }] });
+      promptBody = JSON.stringify({ model:"claude-haiku-4-5-20251001", max_tokens:4000, messages:[{ role:"user", content:prompt }] });
     } catch(e) {
       setAiRecs([{ error: true, msg: `Failed to build request — bad character in your data: ${e.message}` }]);
       setAiLoading(false);
       return;
     }
 
-    // If we reach here, prompt built successfully
-    setAiRecs([{ error: true, msg: `DEBUG: Prompt built OK (${promptBody.length} chars). Now calling /api/claude...` }]);
-
+    // Prompt built — call API
     try {
       const res = await fetch("/api/claude", {
         method: "POST",
