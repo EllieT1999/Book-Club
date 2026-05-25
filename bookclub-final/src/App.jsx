@@ -217,6 +217,72 @@ function BlurbText({ text }) {
   );
 }
 
+function RecCard({ rec, voteCount, iVoted, onVote, currentUser }) {
+  const [showMembers, setShowMembers] = useState(false);
+  return (
+    <div className="rec-card">
+      <div className="rec-rank-col">
+        <div className={`rec-rank-num ${rec.rank<=3?"gold":""}`}>{rec.rank}</div>
+      </div>
+      {rec.cover
+        ? <img src={rec.cover} alt="" className="rec-cover"/>
+        : <div className="rec-cover-ph">📖</div>
+      }
+      <div className="rec-body">
+        <div>
+          <div className="rec-title">{rec.title}</div>
+          <div className="rec-author">by {rec.author}</div>
+          <div className="rec-tags">
+            <span className="rec-genre-tag">{rec.genre}</span>
+            {rec.fromSuggestions&&<span className="rec-from">from suggestions</span>}
+          </div>
+        </div>
+        {rec.blurb&&(
+          <>
+            <div className="rec-section-label">About this book</div>
+            <div className="rec-blurb">{rec.blurb}</div>
+          </>
+        )}
+        {rec.whyThisBook&&(
+          <>
+            <div className="rec-section-label">Why it's great for the group</div>
+            <div className="rec-why">{rec.whyThisBook}</div>
+          </>
+        )}
+        {rec.tasteOverlap&&<div className="rec-overlap">✦ {rec.tasteOverlap}</div>}
+        <div className="rec-footer">
+          <div className="rec-match">{rec.matchScore}% group match</div>
+          {rec.memberMatch&&rec.memberMatch.length>0&&(
+            <button className="rec-expand-btn" onClick={()=>setShowMembers(s=>!s)}>
+              {showMembers?"Hide breakdown ▲":"Who'll love this ▼"}
+            </button>
+          )}
+        </div>
+        {showMembers&&rec.memberMatch&&(
+          <div className="rec-members">
+            {rec.memberMatch.map((m,i)=>(
+              <div key={i} className="rec-member-row">
+                <span className="rec-member-name">{m.name}</span>
+                <span className="rec-member-reason">{m.reason}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="rec-vote-col">
+        <div className="rec-vote-count">{voteCount}</div>
+        <div className="rec-vote-label">vote{voteCount!==1?"s":""}</div>
+        {currentUser&&(
+          <button className={`rec-vote-btn ${iVoted?"voted":""}`} onClick={onVote}
+            title={iVoted?"Remove vote":"Vote for this book"}>
+            {iVoted?"✓":"▲"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function BookClub() {
   const [currentUser, setCurrentUser] = useState("");
   const [personalUser, setPersonalUser] = useState("");
@@ -812,37 +878,43 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
     .aibtn:disabled{opacity:.5;cursor:not-allowed}
     .ai-view-only{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:12px 16px;font-size:13px;color:var(--mid);margin-bottom:18px;max-width:480px}
     .ai-view-only strong{color:var(--black)}
-    .recs-list{display:flex;flex-direction:column;gap:2px;margin-top:20px;max-width:680px}
-    .rec-card{background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden;display:flex;transition:border-color .15s,box-shadow .15s}
-    .rec-card:hover{border-color:var(--black);box-shadow:0 2px 12px rgba(26,18,8,.08)}
-    .rec-rank-col{background:var(--red);padding:12px 14px;display:flex;align-items:center;justify-content:center;min-width:48px;flex-shrink:0}
-    .rec-rank-num{font-family:var(--D);font-size:26px;font-weight:900;color:#fff;line-height:1}
+    .recs-list{display:flex;flex-direction:column;gap:8px;margin-top:20px}
+    .rec-card{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;display:flex;transition:border-color .15s,box-shadow .15s}
+    .rec-card:hover{border-color:var(--black);box-shadow:0 2px 16px rgba(26,18,8,.08)}
+    .rec-rank-col{background:var(--red);padding:14px 16px;display:flex;align-items:center;justify-content:center;min-width:52px;flex-shrink:0}
+    .rec-rank-num{font-family:var(--D);font-size:28px;font-weight:900;color:#fff;line-height:1}
     .rec-rank-num.gold{color:var(--yellow)}
-    .rec-cover{width:54px;height:78px;object-fit:cover;flex-shrink:0}
-    .rec-cover-ph{width:54px;height:78px;background:var(--bg);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--mid)}
-    .rec-body{padding:12px 14px;flex:1;min-width:0}
-    .rec-title{font-family:var(--D);font-size:17px;font-weight:800;text-transform:uppercase;letter-spacing:-.1px;color:var(--black);line-height:1.1}
-    .rec-author{font-size:11px;color:var(--mid);font-style:italic;margin-top:3px}
-    .rec-why{font-size:12px;line-height:1.6;margin-top:6px;color:var(--mid)}
-    .rec-footer{display:flex;align-items:center;gap:8px;margin-top:7px}
-    .rec-match{display:inline-block;background:var(--yellow);color:var(--black);font-family:var(--D);font-size:12px;font-weight:700;border-radius:3px;padding:2px 8px}
-    .rec-from{display:inline-block;background:var(--bg);border:1px solid var(--border);font-size:10px;border-radius:3px;padding:2px 7px;text-transform:uppercase;letter-spacing:.05em;color:var(--mid)}
-    .no-recs{padding:32px 0;color:var(--mid);font-size:13px;font-style:italic}
-    .ai-data-warning{background:var(--yellow);border-radius:6px;padding:10px 14px;font-size:13px;font-weight:500;margin-bottom:16px;max-width:560px;color:var(--black)}
-    .rec-overlap{font-size:11px;color:var(--red);font-weight:600;margin-top:6px;text-transform:uppercase;letter-spacing:.04em}
-    .rec-blurb{font-size:12px;line-height:1.6;margin-top:6px;color:var(--black);font-style:italic;padding:8px 10px;background:var(--bg);border-radius:4px;border-left:2px solid var(--yellow)}
-    .rec-members{display:flex;flex-direction:column;gap:4px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
-    .rec-member-row{display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
-    .rec-member-name{font-size:11px;font-weight:700;color:var(--black);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
+    .rec-cover{width:70px;height:100px;object-fit:cover;flex-shrink:0;align-self:stretch;object-position:center}
+    .rec-cover-ph{width:70px;height:100px;background:var(--bg);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--mid)}
+    .rec-body{padding:14px 16px;flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+    .rec-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap}
+    .rec-title{font-family:var(--D);font-size:18px;font-weight:800;text-transform:uppercase;letter-spacing:-.1px;color:var(--black);line-height:1.1}
+    .rec-author{font-size:12px;color:var(--mid);font-style:italic;margin-top:2px}
+    .rec-tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:2px}
+    .rec-genre-tag{display:inline-block;background:var(--yellow);border-radius:3px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:2px 7px;color:var(--black)}
+    .rec-from{display:inline-block;background:var(--bg);border:1px solid var(--border);font-size:9px;border-radius:3px;padding:2px 7px;text-transform:uppercase;letter-spacing:.05em;color:var(--mid)}
+    .rec-section-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--mid);margin-top:4px}
+    .rec-blurb{font-size:13px;line-height:1.6;color:var(--black);font-style:italic}
+    .rec-why{font-size:12px;line-height:1.6;color:var(--mid)}
+    .rec-overlap{font-size:11px;color:var(--red);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+    .rec-footer{display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap}
+    .rec-match{display:inline-block;background:var(--yellow);color:var(--black);font-family:var(--D);font-size:12px;font-weight:700;border-radius:3px;padding:3px 10px}
+    .rec-expand-btn{background:none;border:1px solid var(--border);border-radius:4px;padding:3px 10px;font-size:11px;font-family:var(--B);font-weight:500;cursor:pointer;color:var(--mid);transition:all .12s}
+    .rec-expand-btn:hover{border-color:var(--black);color:var(--black)}
+    .rec-members{display:flex;flex-direction:column;gap:5px;margin-top:8px;padding:10px 12px;background:var(--bg);border-radius:6px;border:1px solid var(--border)}
+    .rec-member-row{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+    .rec-member-name{font-size:11px;font-weight:700;color:var(--black);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;min-width:60px}
     .rec-member-reason{font-size:11px;color:var(--mid);font-style:italic}
-    .rec-vote-col{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 12px;border-left:1px solid var(--border);flex-shrink:0;gap:3px;min-width:54px}
-    .rec-vote-btn{background:none;border:1.5px solid var(--border);border-radius:6px;padding:5px 9px;cursor:pointer;font-family:var(--D);font-size:16px;font-weight:900;color:var(--mid);transition:all .12s;width:100%}
+    .rec-vote-col{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px 14px;border-left:1px solid var(--border);flex-shrink:0;gap:4px;min-width:60px}
+    .rec-vote-btn{background:none;border:1.5px solid var(--border);border-radius:6px;padding:6px 10px;cursor:pointer;font-family:var(--D);font-size:18px;font-weight:900;color:var(--mid);transition:all .12s;width:100%}
     .rec-vote-btn.voted{background:var(--red);border-color:var(--red);color:#fff}
     .rec-vote-btn:hover:not(.voted){border-color:var(--black);color:var(--black)}
-    .rec-vote-count{font-family:var(--D);font-size:18px;font-weight:900;color:var(--black);line-height:1}
+    .rec-vote-count{font-family:var(--D);font-size:20px;font-weight:900;color:var(--black);line-height:1}
     .rec-vote-label{font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--mid)}
     .rec-refresh-row{display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap}
     .rec-refresh-note{font-size:12px;color:var(--mid);font-style:italic}
+    .no-recs{padding:32px 0;color:var(--mid);font-size:13px;font-style:italic}
+    .ai-data-warning{background:var(--yellow);border-radius:6px;padding:10px 14px;font-size:13px;font-weight:500;margin-bottom:16px;max-width:560px;color:var(--black)}
 
     /* ── FORMS ── */
     .addbtn{display:flex;align-items:center;gap:7px;background:none;border:1px dashed var(--border);border-radius:6px;padding:11px 16px;width:100%;cursor:pointer;color:var(--mid);font-family:var(--B);font-size:13px;transition:all .12s;margin-top:10px}
@@ -1116,48 +1188,10 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
               <div className="recs-list">
                 {aiRecs.map(rec=>{
                   const voteCount = Object.values(aiVotes).filter(v=>v===rec.rank).length;
-                  const myVote = aiVotes[currentUser];
-                  const iVoted = myVote===rec.rank;
+                  const iVoted = aiVotes[currentUser]===rec.rank;
                   return (
-                    <div key={rec.rank} className="rec-card">
-                      <div className="rec-rank-col">
-                        <div className={`rec-rank-num ${rec.rank<=3?"gold":""}`}>{rec.rank}</div>
-                      </div>
-                      {rec.cover?<img src={rec.cover} alt="" className="rec-cover"/>:<div className="rec-cover-ph">📖</div>}
-                      <div className="rec-body">
-                        <div className="rec-title">{rec.title}</div>
-                        <div className="rec-author">by {rec.author} · {rec.genre}
-                          {rec.fromSuggestions&&<span className="rec-from" style={{marginLeft:6}}>from suggestions</span>}
-                        </div>
-                        {rec.blurb&&<div className="rec-blurb">{rec.blurb}</div>}
-                        <div className="rec-why">{rec.whyThisBook}</div>
-                        {rec.tasteOverlap&&<div className="rec-overlap">✦ {rec.tasteOverlap}</div>}
-                        {rec.memberMatch&&rec.memberMatch.length>0&&(
-                          <div className="rec-members">
-                            {rec.memberMatch.map((m,i)=>(
-                              <div key={i} className="rec-member-row">
-                                <span className="rec-member-name">{m.name}</span>
-                                <span className="rec-member-reason">{m.reason}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        <div className="rec-footer">
-                          <div className="rec-match">{rec.matchScore}% group match</div>
-                        </div>
-                      </div>
-                      <div className="rec-vote-col">
-                        <div className="rec-vote-count">{voteCount}</div>
-                        <div className="rec-vote-label">vote{voteCount!==1?"s":""}</div>
-                        {currentUser&&(
-                          <button
-                            className={`rec-vote-btn ${iVoted?"voted":""}`}
-                            onClick={()=>toggleAiVote(rec.rank)}
-                            title={iVoted?"Remove vote":"Vote for this book"}
-                          >{iVoted?"✓":"▲"}</button>
-                        )}
-                      </div>
-                    </div>
+                    <RecCard key={rec.rank} rec={rec} voteCount={voteCount} iVoted={iVoted}
+                      onVote={()=>toggleAiVote(rec.rank)} currentUser={currentUser}/>
                   );
                 })}
                 {Object.keys(aiVotes).length>0&&(
