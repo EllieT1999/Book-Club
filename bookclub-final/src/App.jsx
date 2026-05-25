@@ -500,9 +500,16 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
 
       let data;
       try {
-        data = await res.json();
+        const rawText = await res.text();
+        try {
+          data = JSON.parse(rawText);
+        } catch(e) {
+          setAiRecs([{ error: true, msg: `API returned non-JSON (status ${res.status}): ${rawText.slice(0, 300)}` }]);
+          setAiLoading(false);
+          return;
+        }
       } catch(e) {
-        setAiRecs([{ error: true, msg: `Failed to parse API response as JSON: ${e.message}` }]);
+        setAiRecs([{ error: true, msg: `Failed to read API response: ${e.message}` }]);
         setAiLoading(false);
         return;
       }
