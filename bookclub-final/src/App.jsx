@@ -456,10 +456,21 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "Content-Type":"application/json", "x-api-key":ANTHROPIC_API_KEY, "anthropic-version":"2023-06-01" },
-        body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:3000, messages:[{ role:"user", content:prompt }] })
+        body: JSON.stringify({ model:"claude-sonnet-4-6", max_tokens:3000, messages:[{ role:"user", content:prompt }] })
       });
       const data = await res.json();
+      if (!res.ok) {
+        console.error("API error:", data);
+        setAiRecs([{ error: true, msg: data?.error?.message || `HTTP ${res.status}` }]);
+        setAiLoading(false);
+        return;
+      }
       const text = data.content?.find(b => b.type==="text")?.text || "";
+      if (!text) {
+        setAiRecs([{ error: true, msg: "Empty response from API" }]);
+        setAiLoading(false);
+        return;
+      }
       const parsed = JSON.parse(text.replace(/```json|```/g,"").trim());
       const enriched = await Promise.all(parsed.map(async rec => {
         const results = await searchGoogleBooks(`${rec.title} ${rec.author}`);
@@ -467,8 +478,8 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
       }));
       setAiRecs(enriched);
     } catch(e) {
-      console.error(e);
-      setAiRecs([{ error: true }]);
+      console.error("getAIRecs failed:", e);
+      setAiRecs([{ error: true, msg: e.message }]);
     }
     setAiLoading(false);
   }
@@ -1080,7 +1091,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
                 )}
               </div>
             )}
-            {aiRecs[0]?.error&&<div className="aierr">Couldn't get recommendations — try again in a moment.</div>}
+            {aiRecs[0]?.error&&<div className="aierr">Error: {aiRecs[0].msg || "Couldn't get recommendations — try again in a moment."}</div>}
           </div>
         )}
 
