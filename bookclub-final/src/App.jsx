@@ -17,6 +17,16 @@ function avgRating(ratings) {
   return (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1);
 }
 
+// personal_books stores rating as integer*2 to support half-stars (e.g. 6.5 → 13)
+// Old data was stored as plain integers (7, 8, etc.) so we detect by value > 10
+function fromStoredRating(r) {
+  if (!r && r !== 0) return null;
+  return r > 10 ? r / 2 : r;
+}
+function toStoredRating(v) {
+  return Math.round((v || 0) * 2);
+}
+
 async function searchGoogleBooks(query) {
   if (!query || query.length < 3) return [];
   try {
@@ -348,7 +358,7 @@ export default function BookClub() {
     if (!personalUser) { alert("Please select your name first!"); return; }
     const { error } = await supabase.from("personal_books").insert({
       title: newPersonal.title.trim(), author: newPersonal.author.trim(),
-      genre: newPersonal.genre, rating: newPersonal.myRating,
+      genre: newPersonal.genre, rating: toStoredRating(newPersonal.myRating),
       cover: newPersonal.cover || null, description: newPersonal.description || null,
       member: personalUser,
     });
@@ -392,11 +402,11 @@ export default function BookClub() {
     setAiVotes({});
 
     // Build personal books summary — only books rated 7+ out of 10
-    const highlyRatedPersonal = personalBooks.filter(b => (b.rating || 0) >= 7);
+    const highlyRatedPersonal = personalBooks.filter(b => (fromStoredRating(b.rating) || 0) >= 7);
     const memberTastes = MEMBERS.map(member => {
       const theirBooks = highlyRatedPersonal.filter(b => b.member === member);
       if (!theirBooks.length) return null;
-      return `${member} (rated 7+/10): ${theirBooks.map(b => `"${b.title}" by ${b.author} (${b.genre}, ${b.rating}/10)`).join(", ")}`;
+      return `${member} (rated 7+/10): ${theirBooks.map(b => `"${b.title}" by ${b.author} (${b.genre}, ${fromStoredRating(b.rating)}/10)`).join(", ")}`;
     }).filter(Boolean).join("\n");
 
     // Books already read as a group (for context — don't re-recommend these)
@@ -898,10 +908,10 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
                         <div key={m} className="mrat unrated"><span className="who2">{m}</span><span className="sc">–</span></div>
                       ))}
                     </div>
-                    {Object.entries(book.comments||{}).length>0&&(
+                    {Object.entries(book.comments||{}).filter(([,c])=>c?.trim()).length>0&&(
                       <div className="bcomments">
-                        {Object.entries(book.comments||{}).map(([m,c])=>(
-                          <div key={m} className="bcomment"><strong>{m}</strong>{c}</div>
+                        {Object.entries(book.comments||{}).filter(([,c])=>c?.trim()).map(([m,c])=>(
+                          <div key={m} className="bcomment"><strong>{m}</strong>{" "}{c}</div>
                         ))}
                       </div>
                     )}
@@ -1017,7 +1027,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
           <div>
             <div className="section-hdr"><div className="section-title">AI Recommendations</div></div>
             <p className="tab-desc">Claude analyses everyone's personal reading lists (books rated 7+/10) to find crossover in taste — then picks the books most likely to be loved by the whole group. Once generated, the list stays until Ellie refreshes it. Everyone gets one vote for the book they want to read next.</p>
-            {personalBooks.filter(b=>(b.rating||0)>=7).length < 3 && (
+            {personalBooks.filter(b=>(fromStoredRating(b.rating)||0)>=7).length < 3 && (
               <div className="ai-data-warning">💡 The more books everyone adds to their personal reading list with ratings, the better the recommendations will be!</div>
             )}
             {currentUser===ADMIN?(
@@ -1136,7 +1146,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
                         {book.comment&&<div className="bcomments"><div className="bcomment"><span>{book.comment}</span></div></div>}
                       </div>
                       <div className="bright">
-                        <div><div className="avgscore">{book.rating||"—"}</div><div className="avglbl">/ 10</div></div>
+                        <div><div className="avgscore">{fromStoredRating(book.rating)||"—"}</div><div className="avglbl">/ 10</div></div>
                         <div className="btn-row">
                           <button className="commentbtn" onClick={()=>{setCommentPersonalModal(book);setPersonalComment(book.comment||"")}}>
                             {book.comment?"Edit note":"Note"}
@@ -1280,7 +1290,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
               </div>
               <div>
                 <div className="rlbl">Your Rating</div>
-                <StarRating value={editPersonalModal.rating||7} onChange={v=>setEditPersonalModal(m=>({...m,rating:v}))}/>
+                <StarRating value={fromStoredRating(editPersonalModal.rating)||7} onChange={v=>setEditPersonalModal(m=>({...m,rating:toStoredRating(v)}))}/>
               </div>
             </div>
             <div className="factions">
