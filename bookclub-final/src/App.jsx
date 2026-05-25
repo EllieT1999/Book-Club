@@ -3,8 +3,6 @@ import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = "https://qjxeotvgnatsnaecesjl.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_wGS2qw38rGLjPI1daKMwDg_c2JflEu3";
-const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_KEY;
-
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const GENRES = ["Literary Fiction","Fiction","Memoir","Non-Fiction","Mystery","Sci-Fi","Fantasy","Historical Fiction","Romance","Thriller","Biography","Self-Help","Crime","Short Stories","Poetry"];
@@ -46,9 +44,9 @@ async function searchGoogleBooks(query) {
 async function summariseDescription(rawText, title, author) {
   if (!rawText || rawText.length < 40) return rawText;
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetch("/api/claude", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 120,
@@ -463,9 +461,9 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
 }]`;
 
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const res = await fetch("/api/claude", {
         method: "POST",
-        headers: { "Content-Type":"application/json", "x-api-key":ANTHROPIC_API_KEY, "anthropic-version":"2023-06-01" },
+        headers: { "Content-Type":"application/json" },
         body: JSON.stringify({ model:"claude-sonnet-4-6", max_tokens:3000, messages:[{ role:"user", content:prompt }] })
       });
       const data = await res.json();
