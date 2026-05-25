@@ -485,38 +485,64 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
         headers: { "Content-Type":"application/json" },
         body: JSON.stringify({ model:"claude-sonnet-4-6", max_tokens:6000, messages:[{ role:"user", content:prompt }] })
       });
-      const data = await res.json();
-      if (!res.ok) {
-        console.error("API error:", data);
-        setAiRecs([{ error: true, msg: data?.error?.message || `HTTP ${res.status}` }]);
+
+      let data;
+      try {
+        data = await res.json();
+      } catch(e) {
+        setAiRecs([{ error: true, msg: `Failed to parse API response as JSON: ${e.message}` }]);
         setAiLoading(false);
         return;
       }
+
+      if (!res.ok) {
+        setAiRecs([{ error: true, msg: `API returned ${res.status}: ${data?.error?.message || JSON.stringify(data)}` }]);
+        setAiLoading(false);
+        return;
+      }
+
       const text = data.content?.find(b => b.type==="text")?.text || "";
       if (!text) {
-        setAiRecs([{ error: true, msg: "Empty response from API" }]);
+        setAiRecs([{ error: true, msg: `No text in response. Keys: ${Object.keys(data).join(", ")}` }]);
         setAiLoading(false);
         return;
       }
-      // Extract the JSON array robustly - find first [ to last ]
+
       const jsonStart = text.indexOf("[");
       const jsonEnd = text.lastIndexOf("]");
       if (jsonStart === -1 || jsonEnd === -1) {
-        setAiRecs([{ error: true, msg: "Could not find JSON in response" }]);
+        setAiRecs([{ error: true, msg: `No JSON array found. Response starts: ${text.slice(0,200)}` }]);
         setAiLoading(false);
         return;
       }
+
       const jsonStr = text.slice(jsonStart, jsonEnd + 1);
-      const parsed = JSON.parse(jsonStr);
+      let parsed;
+      try {
+        parsed = JSON.parse(jsonStr);
+      } catch(e) {
+        setAiRecs([{ error: true, msg: `JSON parse failed: ${e.message}. JSON starts: ${jsonStr.slice(0,200)}` }]);
+        setAiLoading(false);
+        return;
+      }
+
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        setAiRecs([{ error: true, msg: `Parsed result is not a valid array. Got: ${typeof parsed}` }]);
+        setAiLoading(false);
+        return;
+      }
+
       const enriched = await Promise.all(parsed.map(async rec => {
-        const results = await searchGoogleBooks(`${rec.title} ${rec.author}`);
-        return { ...rec, cover: results[0]?.cover || null };
+        try {
+          const results = await searchGoogleBooks(`${rec.title} ${rec.author}`);
+          return { ...rec, cover: results[0]?.cover || null };
+        } catch(e) {
+          return { ...rec, cover: null };
+        }
       }));
       setAiRecs(enriched);
     } catch(e) {
-      console.error("getAIRecs failed:", e.message);
-      console.error("Full error:", e);
-      setAiRecs([{ error: true, msg: e.message }]);
+      setAiRecs([{ error: true, msg: `Unexpected error: ${e.message}` }]);
     }
     setAiLoading(false);
   }
