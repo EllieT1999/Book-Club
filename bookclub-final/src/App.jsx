@@ -9,18 +9,32 @@ const GENRES = ["Literary Fiction","Fiction","Memoir","Non-Fiction","Mystery","S
 const MEMBERS = ["Ali","Bec","Cassie","Chloe","Chloe VN","Ellie","Emma","Erin","Evie","Gabby","Georgie","Hannah","Harriet","Izzy","Jorgia","Lara","Lillay","Maddie","Molly","Pip","Rachel","Ruby","Sanyogita","Soph","Tash"];
 const ADMIN = "Ellie";
 
-// personal_books.rating and books.ratings values are stored as integer*2 to support
-// half-stars (e.g. 6.5 → 13). Old data was plain integers (7, 8 etc), detected by value ≤ 10.
+// books.ratings stores plain numbers (integers, no x2 encoding)
+// personal_books.rating uses x2 encoding to support half-stars
+// Half-stars in books.ratings are rounded to nearest 0.5 for display but stored as-is if jsonb allows,
+// or rounded to integer if the column has an integer constraint
 function fromStoredRating(r) {
   if (r == null) return null;
-  return r > 10 ? r / 2 : r;
+  return r > 10 ? r / 2 : r;  // x2 encoded (personal_books) vs plain
 }
 function toStoredRating(v) {
-  return Math.round((v || 0) * 2);
+  const n = parseFloat(v);
+  if (isNaN(n)) return 14;
+  return Math.round(n * 2);
+}
+// For books.ratings jsonb - store as plain number, round half-stars
+function toBookRating(v) {
+  const n = parseFloat(v);
+  if (isNaN(n)) return 7;
+  return Math.round(n * 2) / 2; // keep .5 precision but as a number
+}
+function fromBookRating(r) {
+  if (r == null) return null;
+  return r; // stored as-is
 }
 
 function avgRating(ratings) {
-  const vals = Object.values(ratings || {}).filter(v => v != null).map(fromStoredRating);
+  const vals = Object.values(ratings || {}).filter(v => v != null).map(fromBookRating);
   if (!vals.length) return null;
   return (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1);
 }
@@ -237,7 +251,12 @@ export default function BookClub() {
   const [editForm, setEditForm] = useState({});
 
   const [aiRecs, setAiRecs] = useState(() => {
-    try { const s = localStorage.getItem("bc_ai_recs"); return s ? JSON.parse(s) : []; } catch { return []; }
+    try {
+      const s = localStorage.getItem("bc_ai_recs");
+      const parsed = s ? JSON.parse(s) : [];
+      // Don't restore error states from previous sessions
+      return Array.isArray(parsed) && !parsed[0]?.error ? parsed : [];
+    } catch { return []; }
   });
   const [aiLoading, setAiLoading] = useState(false);
   const [aiVotes, setAiVotes] = useState(() => {
@@ -280,7 +299,7 @@ export default function BookClub() {
     if (!currentUser) { alert("Please select your name first!"); return; }
     const { error } = await supabase.from("books").insert({
       title: newBook.title.trim(), author: newBook.author.trim(),
-      genre: newBook.genre, ratings: { [currentUser]: toStoredRating(newBook.myRating) },
+      genre: newBook.genre, ratings: { [currentUser]: toBookRating(newBook.myRating) },
       comments: {}, cover: newBook.cover || null,
       description: newBook.description || null,
       google_id: newBook.googleId || null, added_by: currentUser,
@@ -308,7 +327,7 @@ export default function BookClub() {
 
   async function rateBook(bookId) {
     const book = books.find(b => b.id === bookId);
-    const updated = { ...(book.ratings || {}), [currentUser]: toStoredRating(myRating) };
+    const updated = { ...(book.ratings || {}), [currentUser]: toBookRating(myRating) };
     await supabase.from("books").update({ ratings: updated }).eq("id", bookId);
     await fetchAll();
     setRateModal(null);
@@ -900,7 +919,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
                     {book.description&&<BlurbText text={book.description}/>}
                     <div className="bratings">
                       {Object.entries(book.ratings||{}).map(([m,r])=>(
-                        <div key={m} className="mrat"><span className="who2">{m}</span><span className="sc">{fromStoredRating(r)}/10</span></div>
+                        <div key={m} className="mrat"><span className="who2">{m}</span><span className="sc">{fromBookRating(r)}/10</span></div>
                       ))}
                       {MEMBERS.filter(m=>!(book.ratings||{})[m]).map(m=>(
                         <div key={m} className="mrat unrated"><span className="who2">{m}</span><span className="sc">–</span></div>
@@ -921,7 +940,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
                       <button className="ratebtn" onClick={()=>{
                         if (!currentUser) return;
                         setRateModal(book);
-                        setMyRating(fromStoredRating((book.ratings||{})[currentUser])||7);
+                        setMyRating(fromBookRating((book.ratings||{})[currentUser])||7);
                         setMyComment((book.comments||{})[currentUser]||"");
                       }}>
                         {currentUser&&(book.ratings||{})[currentUser]!=null?"Rated ✓":"Rate"}
@@ -1198,9 +1217,16 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
             <div className="factions" style={{marginTop:14}}>
               <button className="bprimary" onClick={async()=>{
                 const book = books.find(b=>b.id===rateModal.id);
-                const updRatings = {...(book.ratings||{}), [currentUser]: toStoredRating(myRating)};
+                const storedRating = toBookRating(myRating);
+                const updRatings = {...(book.ratings||{}), [currentUser]: storedRating};
                 const updComments = {...(book.comments||{}), [currentUser]: myComment};
-                await supabase.from("books").update({ratings:updRatings, comments:updComments}).eq("id",rateModal.id);
+                console.log("Saving rating:", {storedRating, myRating, updRatings});
+                const { error } = await supabase.from("books").update({ratings:updRatings, comments:updComments}).eq("id",rateModal.id);
+                if (error) {
+                  console.error("Rate save error:", JSON.stringify(error));
+                  alert("Error saving: " + (error.message || error.details || JSON.stringify(error)));
+                  return;
+                }
                 await fetchAll();
                 setRateModal(null);
                 setMyComment("");
