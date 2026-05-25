@@ -158,6 +158,22 @@ function CoverUpload({ onUpload, currentCover }) {
   );
 }
 
+function BlurbText({ text }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!text) return null;
+  const isLong = text.length > 180;
+  return (
+    <div className="bdesc-wrap">
+      <span className={`bdesc${expanded ? " bdesc-open" : ""}`}>{text}</span>
+      {isLong && (
+        <button className="bdesc-toggle" onClick={() => setExpanded(e => !e)}>
+          {expanded ? "show less ▲" : "read more ▼"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function BookClub() {
   const [currentUser, setCurrentUser] = useState("");
   const [personalUser, setPersonalUser] = useState("");
@@ -609,7 +625,11 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
     .bcomment{font-size:12px;background:var(--bg);border-left:2px solid var(--yellow);padding:4px 8px;border-radius:0 3px 3px 0;color:var(--mid)}
     .bcomment strong{color:var(--black);margin-right:4px;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
     .addedbylbl{font-size:10px;color:var(--border);margin-top:3px}
-    .bdesc{font-size:12px;color:var(--mid);margin-top:6px;line-height:1.55;font-style:italic;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+    .bdesc-wrap{margin-top:6px}
+    .bdesc{font-size:12px;color:var(--mid);line-height:1.55;font-style:italic;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+    .bdesc.bdesc-open{display:block;overflow:visible;-webkit-line-clamp:unset}
+    .bdesc-toggle{background:none;border:none;padding:2px 0 0;font-size:11px;color:var(--red);cursor:pointer;font-family:var(--B);font-weight:600;display:block;margin-top:2px}
+    .bdesc-toggle:hover{text-decoration:underline}
     .bright{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
     .avgscore{font-family:var(--D);font-size:34px;font-weight:900;line-height:1;color:var(--black)}
     .avglbl{font-size:9px;color:var(--mid);text-transform:uppercase;letter-spacing:.08em;text-align:right}
@@ -750,6 +770,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
     .empty-title{font-family:var(--S);font-size:22px;font-style:italic;color:var(--border)}
     .empty-sub{font-size:13px;margin-top:4px}
     .need-name{background:var(--yellow);border-radius:5px;padding:9px 14px;font-size:13px;font-weight:500;margin-bottom:12px;color:var(--black)}
+    .no-name-banner{background:var(--yellow);border-radius:6px;padding:11px 16px;font-size:13px;font-weight:500;margin-bottom:20px;color:var(--black);display:flex;align-items:center;gap:8px}
     .aierr{margin-top:14px;padding:14px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--red);font-size:13px}
 
     @media(max-width:640px){
@@ -801,11 +822,16 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
       </div>
 
       <div className="content">
+        {!currentUser&&(
+          <div className="no-name-banner">
+            👋 <strong>Select your name</strong> in the top right to rate books, add suggestions, and more.
+          </div>
+        )}
 
         {/* ── LIBRARY ── */}
         {tab==="library"&&(
           <div>
-            <p className="tab-desc">Every book we have ready together, ranked by average rating</p>
+            <p className="tab-desc">Every book the club has read together, ranked by average member rating. Rate books, leave notes, and keep the record straight.</p>
             <div className="section-hdr">
               <div className="section-title">Books we've read</div>
               <div className="section-count">{books.length} books</div>
@@ -820,7 +846,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
                     <div className="btitle">{book.title}</div>
                     <div className="bauthor">{book.author}</div>
                     <span className="bgenre">{book.genre}</span>
-                    {book.description&&<div className="bdesc">{book.description}</div>}
+                    {book.description&&<BlurbText text={book.description}/>}
                     <div className="bratings">
                       {Object.entries(book.ratings||{}).map(([m,r])=>(
                         <div key={m} className="mrat"><span className="who2">{m}</span><span className="sc">{r}/10</span></div>
@@ -841,22 +867,21 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
                   <div className="bright">
                     <div><div className="avgscore">{avgRating(book.ratings)||"—"}</div><div className="avglbl">avg/10</div></div>
                     <div className="btn-row">
-                      {currentUser&&(
-                        <button className="ratebtn" onClick={()=>{
-                          setRateModal(book);
-                          setMyRating((book.ratings||{})[currentUser]||7);
-                          setMyComment((book.comments||{})[currentUser]||"");
-                        }}>
-                          {(book.ratings||{})[currentUser]?"Rated ✓":"Rate"}
-                        </button>
-                      )}
+                      <button className="ratebtn" onClick={()=>{
+                        if (!currentUser) return;
+                        setRateModal(book);
+                        setMyRating((book.ratings||{})[currentUser]||7);
+                        setMyComment((book.comments||{})[currentUser]||"");
+                      }}>
+                        {currentUser&&(book.ratings||{})[currentUser]?"Rated ✓":"Rate"}
+                      </button>
                       <button className="iconbtn" onClick={()=>{setEditModal(book);setEditForm({title:book.title,author:book.author,genre:book.genre,cover:book.cover,description:book.description||""})}}>Edit</button>
                     </div>
                   </div>
                 </div>
               ))}
             </div>
-            {!currentUser&&<div className="need-name">Select your name at the top to add or rate books.</div>}
+            {!currentUser&&<div className="need-name" style={{display:"none"}}/>}
             {currentUser&&(showAddBook?(
               <div className="aform">
                 <div className="fgrp" style={{position:"relative"}}>
@@ -887,7 +912,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
         {/* ── SUGGESTIONS ── */}
         {tab==="suggestions"&&(
           <div>
-            <p className="tab-desc">Suggest books you'd love to read next and vote for your favourites</p>
+            <p className="tab-desc">Suggest books you'd love the club to read next. Vote for your favourites — the most-voted ideas rise to the top.</p>
             <div className="section-hdr">
               <div className="section-title">Suggestions</div>
               <div className="section-count">{suggestions.length} ideas</div>
@@ -901,6 +926,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
                     <div className="stitle">{s.title}</div>
                     <div className="sauthor">{s.author}</div>
                     <div className="smeta">{s.genre} · Suggested by {s.suggested_by}</div>
+                    {s.description&&<BlurbText text={s.description}/>}
                     {s.reason&&<div className="sreason">{s.reason}</div>}
                     {s.votes?.length>0&&<div className="voters">👍 {s.votes.join(", ")}</div>}
                   </div>
@@ -916,7 +942,6 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
                 </div>
               ))}
             </div>
-            {!currentUser&&<div className="need-name">Select your name at the top to add suggestions.</div>}
             {currentUser&&(showAddSugg?(
               <div className="aform">
                 <div className="fgrp" style={{position:"relative"}}>
@@ -947,7 +972,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
         {tab==="recommend"&&(
           <div>
             <div className="section-hdr"><div className="section-title">AI Recommendations</div></div>
-            <p className="tab-desc">Claude analyses everyone's suggestions and personal reading lists (books rated 7-10) to find crossover in taste — then picks the books most likely to be loved by the whole group</p>
+            <p className="tab-desc">Claude analyses everyone's personal reading lists (books rated 7+/10) to find crossover in taste — then picks the books most likely to be loved by the whole group. Once generated, the list stays until Ellie refreshes it. Everyone gets one vote for the book they want to read next.</p>
             {personalBooks.filter(b=>(b.rating||0)>=7).length < 3 && (
               <div className="ai-data-warning">💡 The more books everyone adds to their personal reading list with ratings, the better the recommendations will be!</div>
             )}
@@ -1032,7 +1057,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
             <div className="section-hdr">
               <div className="section-title">Personal Library</div>
             </div>
-            <p className="tab-desc">Everyone's personal reading list — books you've read outside of book club. Add your own reads with ratings</p>
+            <p className="tab-desc">Everyone's personal reading list — books you've read outside of book club. Add your own reads with ratings; the AI uses highly-rated books (7+/10) to power its recommendations.</p>
             {/* Member selector — independent from the global user selector */}
             <div style={{marginBottom:20}}>
               <select
@@ -1063,6 +1088,7 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
                         <div className="btitle">{book.title}</div>
                         <div className="bauthor">{book.author}</div>
                         <span className="bgenre">{book.genre}</span>
+                        {book.description&&<BlurbText text={book.description}/>}
                         {book.comment&&<div className="bcomments"><div className="bcomment"><span>{book.comment}</span></div></div>}
                       </div>
                       <div className="bright">
