@@ -50,7 +50,7 @@ async function summariseDescription(rawText, title, author) {
   } catch { return rawText; }
 }
 
-
+function StarRating({ value, onChange, readonly, size = 18 }) {
   // value is now in 0.5 increments, 0–10
   // We display 10 stars, each star can be empty, half, or full
   const [hovered, setHovered] = useState(null);
