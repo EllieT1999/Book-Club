@@ -3,38 +3,16 @@ import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = "https://qjxeotvgnatsnaecesjl.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_wGS2qw38rGLjPI1daKMwDg_c2JflEu3";
+const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_KEY;
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const GENRES = ["Literary Fiction","Fiction","Memoir","Non-Fiction","Mystery","Sci-Fi","Fantasy","Historical Fiction","Romance","Thriller","Biography","Self-Help","Crime","Short Stories","Poetry"];
 const MEMBERS = ["Ali","Bec","Cassie","Chloe","Ellie","Emma","Evie","Georgie","Hannah","Harriet","Izzy","Lara","Lillay","Maddie","Pip","Rachel","Sanyogita","Soph","Tash"];
 const ADMIN = "Ellie";
 
-// books.ratings stores plain numbers (integers, no x2 encoding)
-// personal_books.rating uses x2 encoding to support half-stars
-// Half-stars in books.ratings are rounded to nearest 0.5 for display but stored as-is if jsonb allows,
-// or rounded to integer if the column has an integer constraint
-function fromStoredRating(r) {
-  if (r == null) return null;
-  return r > 10 ? r / 2 : r;  // x2 encoded (personal_books) vs plain
-}
-function toStoredRating(v) {
-  const n = parseFloat(v);
-  if (isNaN(n)) return 14;
-  return Math.round(n * 2);
-}
-// For books.ratings jsonb - store as plain number, round half-stars
-function toBookRating(v) {
-  const n = parseFloat(v);
-  if (isNaN(n)) return 7;
-  return Math.round(n * 2) / 2; // keep .5 precision but as a number
-}
-function fromBookRating(r) {
-  if (r == null) return null;
-  return r; // stored as-is
-}
-
 function avgRating(ratings) {
-  const vals = Object.values(ratings || {}).filter(v => v != null).map(fromBookRating);
+  const vals = Object.values(ratings || {}).filter(v => v != null);
   if (!vals.length) return null;
   return (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1);
 }
@@ -55,75 +33,13 @@ async function searchGoogleBooks(query) {
   } catch { return []; }
 }
 
-async function summariseDescription(rawText, title, author) {
-  if (!rawText || rawText.length < 40) return rawText;
-  try {
-    const res = await fetch("/api/claude", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 120,
-        messages: [{ role: "user", content: `Summarise this book description for "${title}" by ${author} in 2 clear sentences. Focus only on what the book is actually about — its story, characters, or subject matter. Remove any endorsements, critical praise, or quotes from reviewers. Be direct and spoiler-free. Return only the summary, no preamble.\n\n${rawText}` }]
-      })
-    });
-    const data = await res.json();
-    return data.content?.find(b => b.type === "text")?.text?.trim() || rawText;
-  } catch { return rawText; }
-}
-
 function StarRating({ value, onChange, readonly, size = 18 }) {
-  // value is now in 0.5 increments, 0–10
-  // We display 10 stars, each star can be empty, half, or full
-  const [hovered, setHovered] = useState(null);
-  const display = hovered !== null ? hovered : value;
-
-  function getStarType(starIndex) {
-    // starIndex is 1-based (1..10)
-    if (display >= starIndex) return "full";
-    if (display >= starIndex - 0.5) return "half";
-    return "empty";
-  }
-
-  function handleMouseMove(e, starIndex) {
-    if (readonly) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const half = x < rect.width / 2;
-    setHovered(half ? starIndex - 0.5 : starIndex);
-  }
-
-  function handleClick(e, starIndex) {
-    if (readonly) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const half = x < rect.width / 2;
-    onChange?.(half ? starIndex - 0.5 : starIndex);
-  }
-
   return (
-    <div className="star-row" onMouseLeave={() => !readonly && setHovered(null)}>
-      {[...Array(10)].map((_, i) => {
-        const idx = i + 1;
-        const type = getStarType(idx);
-        return (
-          <button
-            key={i}
-            className={`star star-${type} ${readonly ? "readonly" : ""}`}
-            style={{ fontSize: size, position: "relative" }}
-            onMouseMove={e => handleMouseMove(e, idx)}
-            onClick={e => handleClick(e, idx)}
-            tabIndex={readonly ? -1 : 0}
-          >
-            {type === "half" ? (
-              <span className="star-half-wrap">
-                <span className="star-half-filled">★</span>
-                <span className="star-half-empty">★</span>
-              </span>
-            ) : "★"}
-          </button>
-        );
-      })}
+    <div className="star-row">
+      {[...Array(10)].map((_, i) => (
+        <button key={i} className={`star ${i < value ? "filled" : ""} ${readonly ? "readonly" : ""}`}
+          style={{ fontSize: size }} onClick={() => !readonly && onChange?.(i + 1)} tabIndex={readonly ? -1 : 0}>★</button>
+      ))}
       {value > 0 && <span className="star-label">{value}/10</span>}
     </div>
   );
@@ -133,7 +49,6 @@ function BookSearchInput({ onSelect }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
-  const [summarising, setSummarising] = useState(false);
   const timer = useRef(null);
 
   function handleChange(e) {
@@ -149,19 +64,16 @@ function BookSearchInput({ onSelect }) {
     }, 400);
   }
 
-  async function pick(book) {
+  function pick(book) {
     setQuery(book.title);
     setResults([]);
-    setSummarising(true);
-    const summary = await summariseDescription(book.description, book.title, book.author);
-    setSummarising(false);
-    onSelect({ ...book, description: summary });
+    onSelect(book);
   }
 
   return (
     <div style={{ position: "relative" }}>
       <input className="search-input" value={query} onChange={handleChange} placeholder="Search by title or author…" autoComplete="off"/>
-      {(searching || summarising) && <div className="search-loading">{summarising ? "Summarising blurb…" : "Searching…"}</div>}
+      {searching && <div className="search-loading">Searching…</div>}
       {results.length > 0 && (
         <div className="search-dropdown">
           {results.map(b => (
@@ -181,7 +93,6 @@ function BookSearchInput({ onSelect }) {
 
 function CoverUpload({ onUpload, currentCover }) {
   const fileRef = useRef(null);
-
   function handleFile(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -189,125 +100,30 @@ function CoverUpload({ onUpload, currentCover }) {
     reader.onload = ev => onUpload(ev.target.result);
     reader.readAsDataURL(file);
   }
-
   return (
     <div className="cover-upload-wrap">
       <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={handleFile}/>
       <button type="button" className="cover-upload-btn" onClick={()=>fileRef.current.click()}>
-        {currentCover ? "📷 Change cover image" : "📷 Upload cover image"}
+        {currentCover ? "📷 Change cover" : "📷 Upload cover"}
       </button>
-      <span className="cover-upload-hint">Use this if the search didn't find the right cover</span>
-    </div>
-  );
-}
-
-function BlurbText({ text }) {
-  const [expanded, setExpanded] = useState(false);
-  if (!text) return null;
-  const isLong = text.length > 180;
-  return (
-    <div className="bdesc-wrap">
-      <span className={`bdesc${expanded ? " bdesc-open" : ""}`}>{text}</span>
-      {isLong && (
-        <button className="bdesc-toggle" onClick={() => setExpanded(e => !e)}>
-          {expanded ? "show less ▲" : "read more ▼"}
-        </button>
-      )}
-    </div>
-  );
-}
-
-function RecCard({ rec, voteCount, iVoted, onVote, currentUser }) {
-  const [showMembers, setShowMembers] = useState(false);
-  return (
-    <div className="rec-card">
-      <div className="rec-rank-col">
-        <div className={`rec-rank-num ${rec.rank<=3?"gold":""}`}>{rec.rank}</div>
-      </div>
-      {rec.cover
-        ? <img src={rec.cover} alt="" className="rec-cover"/>
-        : <div className="rec-cover-ph">📖</div>
-      }
-      <div className="rec-body">
-        <div>
-          <div className="rec-title">{rec.title}</div>
-          <div className="rec-author">by {rec.author}</div>
-          <div className="rec-tags">
-            <span className="rec-genre-tag">{rec.genre}</span>
-            {rec.fromSuggestions&&<span className="rec-from">from suggestions</span>}
-          </div>
-        </div>
-        {rec.blurb&&(
-          <>
-            <div className="rec-section-label">About this book</div>
-            <div className="rec-blurb">{rec.blurb}</div>
-          </>
-        )}
-        {rec.whyThisBook&&(
-          <>
-            <div className="rec-section-label">Why it's great for the group</div>
-            <div className="rec-why">{rec.whyThisBook}</div>
-          </>
-        )}
-        {rec.tasteOverlap&&<div className="rec-overlap">✦ {rec.tasteOverlap}</div>}
-        <div className="rec-footer">
-          <div className="rec-match">{rec.matchScore}% group match</div>
-          {rec.memberMatch&&rec.memberMatch.length>0&&(
-            <button className="rec-expand-btn" onClick={()=>setShowMembers(s=>!s)}>
-              {showMembers?"Hide breakdown ▲":"Who'll love this ▼"}
-            </button>
-          )}
-        </div>
-        {showMembers&&rec.memberMatch&&(
-          <div className="rec-members">
-            {rec.memberMatch.map((m,i)=>(
-              <div key={i} className="rec-member-row">
-                <span className="rec-member-name">{m.name}</span>
-                <span className="rec-member-reason">{m.reason}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-      <div className="rec-vote-col">
-        <div className="rec-vote-count">{voteCount}</div>
-        <div className="rec-vote-label">vote{voteCount!==1?"s":""}</div>
-        {currentUser&&(
-          <button className={`rec-vote-btn ${iVoted?"voted":""}`} onClick={onVote}
-            title={iVoted?"Remove vote":"Vote for this book"}>
-            {iVoted?"✓":"▲"}
-          </button>
-        )}
-      </div>
+      <span className="cover-upload-hint">Use if search didn't find the right cover</span>
     </div>
   );
 }
 
 export default function BookClub() {
   const [currentUser, setCurrentUser] = useState("");
-  const [personalUser, setPersonalUser] = useState("");
   const [books, setBooks] = useState([]);
   const [personalBooks, setPersonalBooks] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
   const [tab, setTab] = useState("library");
   const [loading, setLoading] = useState(true);
 
-  // Sync personalUser to currentUser when currentUser is first set, but not the reverse
-  const prevCurrentUser = useRef("");
-  useEffect(() => {
-    if (currentUser && !personalUser) {
-      setPersonalUser(currentUser);
-    }
-    prevCurrentUser.current = currentUser;
-  }, [currentUser]);
-
   const [showAddBook, setShowAddBook] = useState(false);
   const [showAddSugg, setShowAddSugg] = useState(false);
   const [showAddPersonal, setShowAddPersonal] = useState(false);
   const [editModal, setEditModal] = useState(null);
   const [editPersonalModal, setEditPersonalModal] = useState(null);
-  const [editSuggModal, setEditSuggModal] = useState(null);
-  const [editSuggForm, setEditSuggForm] = useState({});
   const [commentPersonalModal, setCommentPersonalModal] = useState(null);
   const [personalComment, setPersonalComment] = useState("");
   const [rateModal, setRateModal] = useState(null);
@@ -316,18 +132,9 @@ export default function BookClub() {
   const [myComment, setMyComment] = useState("");
   const [editForm, setEditForm] = useState({});
 
-  const [aiRecs, setAiRecs] = useState(() => {
-    try {
-      const s = localStorage.getItem("bc_ai_recs");
-      const parsed = s ? JSON.parse(s) : [];
-      // Don't restore error states from previous sessions
-      return Array.isArray(parsed) && !parsed[0]?.error ? parsed : [];
-    } catch { return []; }
-  });
+  const [aiRecs, setAiRecs] = useState([]);
   const [aiLoading, setAiLoading] = useState(false);
-  const [aiVotes, setAiVotes] = useState(() => {
-    try { const s = localStorage.getItem("bc_ai_votes"); return s ? JSON.parse(s) : {}; } catch { return {}; }
-  });
+  const [aiStatus, setAiStatus] = useState("");
 
   const emptyBook = { title:"", author:"", genre:"Literary Fiction", myRating:7, cover:null, description:"", googleId:null };
   const emptySugg = { title:"", author:"", genre:"Literary Fiction", reason:"", cover:null, description:"" };
@@ -365,7 +172,7 @@ export default function BookClub() {
     if (!currentUser) { alert("Please select your name first!"); return; }
     const { error } = await supabase.from("books").insert({
       title: newBook.title.trim(), author: newBook.author.trim(),
-      genre: newBook.genre, ratings: { [currentUser]: toBookRating(newBook.myRating) },
+      genre: newBook.genre, ratings: { [currentUser]: newBook.myRating },
       comments: {}, cover: newBook.cover || null,
       description: newBook.description || null,
       google_id: newBook.googleId || null, added_by: currentUser,
@@ -393,7 +200,7 @@ export default function BookClub() {
 
   async function rateBook(bookId) {
     const book = books.find(b => b.id === bookId);
-    const updated = { ...(book.ratings || {}), [currentUser]: toBookRating(myRating) };
+    const updated = { ...(book.ratings || {}), [currentUser]: myRating };
     await supabase.from("books").update({ ratings: updated }).eq("id", bookId);
     await fetchAll();
     setRateModal(null);
@@ -438,12 +245,12 @@ export default function BookClub() {
 
   async function addPersonalBook() {
     if (!newPersonal.title.trim() || !newPersonal.author.trim()) return;
-    if (!personalUser) { alert("Please select your name first!"); return; }
+    if (!currentUser) { alert("Please select your name first!"); return; }
     const { error } = await supabase.from("personal_books").insert({
       title: newPersonal.title.trim(), author: newPersonal.author.trim(),
-      genre: newPersonal.genre, rating: toStoredRating(newPersonal.myRating),
+      genre: newPersonal.genre, rating: newPersonal.myRating,
       cover: newPersonal.cover || null, description: newPersonal.description || null,
-      member: personalUser,
+      member: currentUser,
     });
     if (error) { alert("Error: " + error.message); return; }
     setNewPersonal(emptyPersonal);
@@ -463,15 +270,6 @@ export default function BookClub() {
     setEditPersonalModal(null);
   }
 
-  async function saveSuggEdit() {
-    await supabase.from("suggestions").update({
-      title: editSuggForm.title, author: editSuggForm.author,
-      genre: editSuggForm.genre, description: editSuggForm.description,
-    }).eq("id", editSuggModal.id);
-    await fetchAll();
-    setEditSuggModal(null);
-  }
-
   async function savePersonalComment(id) {
     await supabase.from("personal_books").update({ comment: personalComment }).eq("id", id);
     await fetchAll();
@@ -482,54 +280,57 @@ export default function BookClub() {
   async function getAIRecs() {
     setAiLoading(true);
     setAiRecs([]);
-    setAiVotes({});
+    setAiStatus("Analysing everyone's reading tastes…");
 
-    // Build personal books summary — only books rated 7+ out of 10
-    const highlyRatedPersonal = personalBooks.filter(b => (fromStoredRating(b.rating) || 0) >= 7);
+    const highlyRatedPersonal = personalBooks.filter(b => (b.rating || 0) >= 7);
     const memberTastes = MEMBERS.map(member => {
       const theirBooks = highlyRatedPersonal.filter(b => b.member === member);
       if (!theirBooks.length) return null;
-      return `${member} (rated 7+/10): ${theirBooks.map(b => `"${b.title}" by ${b.author} (${b.genre}, ${fromStoredRating(b.rating)}/10)`).join(", ")}`;
+      return `${member} (rated 7+/10): ${theirBooks.map(b => `"${b.title}" by ${b.author} (${b.genre}, ${b.rating}/10)`).join(", ")}`;
     }).filter(Boolean).join("\n");
 
-    // Books already read as a group (for context — don't re-recommend these)
     const alreadyRead = books.map(b => `"${b.title}" by ${b.author}`).join(", ");
 
-    // Books appearing on multiple personal lists (avoid recommending these)
-    const allPersonalTitles = personalBooks.map(b => b.title.toLowerCase().trim());
-    const titleCounts = {};
-    allPersonalTitles.forEach(t => { titleCounts[t] = (titleCounts[t] || 0) + 1; });
-    const multiPersonalBooks = personalBooks
-      .filter(b => titleCounts[b.title.toLowerCase().trim()] > 1)
-      .map(b => `"${b.title}" by ${b.author}`)
-      .filter((v, i, a) => a.indexOf(v) === i);
-
-    // Member suggestions as secondary signal
     const suggSummary = suggestions.length
       ? suggestions.map(s => `"${s.title}" by ${s.author} (${s.genre}) — suggested by ${s.suggested_by}${s.reason ? `, reason: ${s.reason}` : ""}, ${s.votes?.length||0} vote(s)`).join("\n")
       : "None";
 
-    const prompt = `You are an expert book recommendation engine for a women's book club with ${MEMBERS.length} members.
+    const prompt = `You are an expert literary analyst and book recommender for a women's book club with ${MEMBERS.length} members.
 
-YOUR PRIMARY DATA SOURCE — Members' personal reading lists (books they've personally read and rated 7 or higher out of 10, meaning they genuinely loved them):
-${memberTastes || "No personal books rated 7+ yet — use suggestions and general taste inference instead."}
+STEP 1 — DEEP TASTE ANALYSIS
+Carefully analyse each member's personal reading list below. For each member identify:
+- Favourite genres, themes, and emotional tones
+- Writing style preferences (literary vs plot-driven, slow-burn vs fast-paced, dark vs uplifting)
+- Recurring subject matter (family dynamics, identity, female friendship, social issues, grief, love, etc.)
 
-SECONDARY SIGNAL — Books members have suggested for the club:
+MEMBERS' PERSONAL READING LISTS (books rated 7+/10 — genuinely loved):
+${memberTastes || "No personal books rated 7+ yet — infer taste from suggestions and recommend broadly acclaimed women's fiction."}
+
+STEP 2 — FIND TASTE CROSSOVER
+Identify across all members:
+- Themes and genres that multiple members gravitate toward
+- Emotional tones appearing repeatedly across different members' lists
+- Shared sensibilities even where members haven't read the same books
+- Authors or styles that suggest compatible tastes
+
+STEP 3 — RESEARCH BROADLY USING WEB SEARCH
+Use web search to research current acclaimed books matching this group's taste crossover. Actively search for:
+- Recent prize-winners and shortlisted books (Women's Prize for Fiction, Booker Prize, Pulitzer, etc.) from the last 5 years
+- Critically acclaimed debuts and second novels matching the group's themes
+- Books that appear on "if you loved X, read Y" recommendation lists for authors the members enjoy
+- Book club favourites with strong reader communities
+- Hidden gems — not just obvious bestsellers
+
+Go beyond your training data. Search actively. The goal is fresh, well-researched recommendations the group won't have obviously encountered.
+
+MEMBER SUGGESTIONS (strong secondary signal — take these seriously, especially highly voted ones):
 ${suggSummary}
 
-ALREADY READ AS A GROUP (do NOT recommend these):
+ALREADY READ AS A GROUP — do NOT recommend these:
 ${alreadyRead || "None yet"}
 
-BOOKS ALREADY READ BY MULTIPLE MEMBERS (do NOT recommend these — they've already read them individually):
-${multiPersonalBooks.length ? multiPersonalBooks.join(", ") : "None"}
-
-YOUR TASK:
-Analyse the crossover in taste between members. Look for:
-- Genres, themes, writing styles, and authors that multiple members love
-- Hidden connections between what different members enjoy
-- Books that would genuinely satisfy the most members based on their proven reading tastes
-
-Return a ranked list of exactly 10 books the whole group should read next. For each, explain specifically WHICH members' taste it matches and why, based on their personal reading history.
+STEP 4 — RANK AND RETURN
+Return exactly 10 books ranked by how well they fit the collective group taste. Mix suggestions with your own researched picks — the best 10 regardless of source. Prioritise books with genuine crossover appeal.
 
 Respond ONLY with a valid JSON array, no markdown, no extra text:
 [{
@@ -538,440 +339,306 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
   "author": "string",
   "genre": "string",
   "fromSuggestions": false,
-  "blurb": "2 sentences max",
-  "whyThisBook": "1 sentence",
+  "blurb": "2 sentences on what the book is about and why it's compelling",
+  "whyThisBook": "1 sentence on why it fits this specific group's taste",
   "memberMatch": [{"name": "MemberName", "reason": "5 words max"}],
-  "tasteOverlap": "half sentence",
+  "tasteOverlap": "the shared taste pattern this targets",
   "matchScore": 85
 }]
-IMPORTANT: memberMatch must ONLY include members who appear in the personal reading data above. Skip anyone not listed.`;
+IMPORTANT: memberMatch must ONLY include members who appear in the personal reading data above. Skip anyone not listed. Keep reasons to 5 words max.`;
 
-    let promptBody;
     try {
-      promptBody = JSON.stringify({ model:"claude-haiku-4-5-20251001", max_tokens:4000, messages:[{ role:"user", content:prompt }] });
-    } catch(e) {
-      setAiRecs([{ error: true, msg: `Failed to build request — bad character in your data: ${e.message}` }]);
-      setAiLoading(false);
-      return;
-    }
-
-    // Prompt built — call API
-    try {
-      const res = await fetch("/api/claude", {
+      setAiStatus("Researching books across the web…");
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: { "Content-Type":"application/json" },
-        body: promptBody,
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01"
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 8000,
+          tools: [{ "type": "web_search_20250305", "name": "web_search" }],
+          messages: [{ role: "user", content: prompt }]
+        })
       });
 
-      let data;
-      try {
-        const rawText = await res.text();
-        try {
-          data = JSON.parse(rawText);
-        } catch(e) {
-          setAiRecs([{ error: true, msg: `API returned non-JSON (status ${res.status}): ${rawText.slice(0, 300)}` }]);
-          setAiLoading(false);
-          return;
-        }
-      } catch(e) {
-        setAiRecs([{ error: true, msg: `Failed to read API response: ${e.message}` }]);
-        setAiLoading(false);
-        return;
-      }
+      const data = await res.json();
 
-      if (!res.ok) {
-        setAiRecs([{ error: true, msg: `API returned ${res.status}: ${data?.error?.message || JSON.stringify(data)}` }]);
-        setAiLoading(false);
-        return;
-      }
+      // Extract text from all text blocks (web search may add tool_use/tool_result blocks)
+      const text = (data.content || [])
+        .filter(b => b.type === "text")
+        .map(b => b.text)
+        .join("");
 
-      const text = data.content?.find(b => b.type==="text")?.text || "";
-      if (!text) {
-        setAiRecs([{ error: true, msg: `No text in response. Keys: ${Object.keys(data).join(", ")}` }]);
-        setAiLoading(false);
-        return;
-      }
-
-      const jsonStart = text.indexOf("[");
-      const jsonEnd = text.lastIndexOf("]");
-      if (jsonStart === -1 || jsonEnd === -1) {
-        setAiRecs([{ error: true, msg: `No JSON array found. Response starts: ${text.slice(0,200)}` }]);
-        setAiLoading(false);
-        return;
-      }
-
-      const jsonStr = text.slice(jsonStart, jsonEnd + 1);
-      let parsed;
-      try {
-        parsed = JSON.parse(jsonStr);
-      } catch(e) {
-        setAiRecs([{ error: true, msg: `JSON parse failed: ${e.message}. JSON starts: ${jsonStr.slice(0,200)}` }]);
-        setAiLoading(false);
-        return;
-      }
-
-      if (!Array.isArray(parsed) || parsed.length === 0) {
-        setAiRecs([{ error: true, msg: `Parsed result is not a valid array. Got: ${typeof parsed}` }]);
-        setAiLoading(false);
-        return;
-      }
+      setAiStatus("Fetching book covers…");
+      const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
 
       const enriched = await Promise.all(parsed.map(async rec => {
-        try {
-          const results = await searchGoogleBooks(`${rec.title} ${rec.author}`);
-          return { ...rec, cover: results[0]?.cover || null };
-        } catch(e) {
-          return { ...rec, cover: null };
-        }
+        const results = await searchGoogleBooks(`${rec.title} ${rec.author}`);
+        return { ...rec, cover: results[0]?.cover || null };
       }));
+
       setAiRecs(enriched);
+      setAiStatus("");
     } catch(e) {
-      setAiRecs([{ error: true, msg: `Unexpected error at: ${e.stack ? e.stack.split('\n').slice(0,3).join(' | ') : e.message}` }]);
+      console.error(e);
+      setAiRecs([{ error: true }]);
+      setAiStatus("");
     }
     setAiLoading(false);
   }
 
-  useEffect(() => {
-    try { localStorage.setItem("bc_ai_recs", JSON.stringify(aiRecs)); } catch {}
-  }, [aiRecs]);
-
-  useEffect(() => {
-    try { localStorage.setItem("bc_ai_votes", JSON.stringify(aiVotes)); } catch {}
-  }, [aiVotes]);
-
-  function toggleAiVote(rank) {
-    if (!currentUser) { alert("Select your name first!"); return; }
-    setAiVotes(prev => {
-      const current = prev[currentUser];
-      if (current === rank) {
-        // unvote
-        const updated = { ...prev };
-        delete updated[currentUser];
-        return updated;
-      }
-      return { ...prev, [currentUser]: rank };
-    });
-  }
-
   const sortedBooks = [...books].sort((a,b) => (parseFloat(avgRating(b.ratings))||0)-(parseFloat(avgRating(a.ratings))||0));
   const sortedSuggs = [...suggestions].sort((a,b) => (b.votes?.length||0)-(a.votes?.length||0));
-  const myPersonalBooks = personalBooks.filter(b => b.member === personalUser);
+  const myPersonalBooks = personalBooks.filter(b => b.member === currentUser);
 
   if (loading) return (
-    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"'Inter',sans-serif",fontSize:52,fontWeight:900,color:"#C8391B",textTransform:"uppercase",letterSpacing:-2,background:"#F5F2EC"}}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@900&display=swap');*{margin:0;padding:0;box-sizing:border-box}`}</style>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"'Playfair Display',serif",fontSize:48,fontWeight:900,color:"#1a1208",background:"#f5f0e8",letterSpacing:2}}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap');*{margin:0;padding:0;box-sizing:border-box}`}</style>
       BOOKED.IN
     </div>
   );
 
   const CSS = `
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,400;1,700&family=DM+Sans:wght@300;400;500;600&display=swap');
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     :root{
-      --bg:#F5F2EC;
-      --card:#FDFCF9;
-      --red:#C8391B;
-      --yellow:#F0C93A;
-      --black:#1A1208;
-      --border:#DDD8CE;
-      --mid:#8A8278;
-      --D:'Inter',sans-serif;
-      --S:'Inter',sans-serif;
-      --B:'Inter',sans-serif;
+      --bg:#F7F3EC;
+      --card:#FDFAF5;
+      --ink:#1A1208;
+      --red:#B5341A;
+      --gold:#C8922A;
+      --gold-light:#F5E6C4;
+      --border:#DDD5C4;
+      --mid:#8A7F6E;
+      --serif:'Playfair Display',serif;
+      --sans:'DM Sans',sans-serif;
     }
-    body{background:var(--bg);font-family:var(--B);color:var(--black);-webkit-font-smoothing:antialiased}
+    body{background:var(--bg);font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased}
     .app{min-height:100vh}
 
-    /* ── HEADER ── */
+    /* HEADER */
     .hdr{
-      background:var(--bg);
-      border-bottom:1.5px solid var(--border);
+      background:var(--ink);
       padding:0 32px;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      position:sticky;
-      top:0;
-      z-index:200;
-      gap:16px;
-      height:56px;
+      display:flex;align-items:center;justify-content:space-between;
+      position:sticky;top:0;z-index:200;
+      gap:16px;height:58px;
     }
-    .logo{font-family:var(--D);font-size:28px;font-weight:900;text-transform:uppercase;letter-spacing:-0.5px;color:var(--black);line-height:1}
-    .logo span{color:var(--red)}
+    .logo{font-family:var(--serif);font-size:26px;font-weight:900;letter-spacing:2px;color:#fff;line-height:1;text-transform:uppercase}
+    .logo span{color:var(--gold)}
     .hdr-right{display:flex;align-items:center;gap:10px}
-    .user-label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--mid)}
+    .user-label{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:rgba(255,255,255,.45);font-family:var(--sans)}
     .user-dropdown{
       appearance:none;-webkit-appearance:none;
-      background:var(--card);
-      border:1.5px solid var(--border);
-      border-radius:6px;
+      background:rgba(255,255,255,.08);
+      border:1px solid rgba(255,255,255,.18);
+      border-radius:5px;
       padding:6px 28px 6px 10px;
-      font-family:var(--D);
-      font-size:15px;
-      font-weight:700;
-      text-transform:uppercase;
-      letter-spacing:.02em;
-      color:var(--black);
-      cursor:pointer;
-      outline:none;
-      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%231A1208' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
-      background-repeat:no-repeat;
-      background-position:right 9px center;
-      transition:border-color .12s;
-      min-width:120px;
+      font-family:var(--sans);
+      font-size:14px;font-weight:600;
+      color:#fff;cursor:pointer;outline:none;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath d='M1 1l4 4 4-4' stroke='white' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat:no-repeat;background-position:right 9px center;
+      transition:border-color .12s;min-width:120px;
     }
-    .user-dropdown:focus{border-color:var(--red)}
-    .user-dropdown.unset{color:var(--mid);border-color:var(--red);border-style:dashed}
+    .user-dropdown option{color:var(--ink);background:#fff}
+    .user-dropdown:focus{border-color:var(--gold)}
+    .user-dropdown.unset{border-color:var(--gold);border-style:dashed;color:rgba(255,255,255,.6)}
 
-    /* ── SLIM HERO ── */
+    /* HERO */
     .hero{
-      background:var(--red);
-      padding:14px 32px;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:16px;
-      border-bottom:1.5px solid var(--black);
-      flex-wrap:wrap;
+      background:var(--card);
+      border-bottom:1px solid var(--border);
+      padding:18px 32px;
+      display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
     }
-    .hero-title{
-      font-family:var(--D);
-      font-size:clamp(28px,4vw,44px);
-      font-weight:900;
-      text-transform:uppercase;
-      letter-spacing:-1px;
-      line-height:1;
-      color:#fff;
-    }
-    .hero-title em{color:var(--yellow);font-style:italic}
-    .hero-stats{display:flex;gap:2px}
-    .hstat{background:#fff;padding:8px 14px;text-align:center;min-width:64px}
-    .hstat:first-child{border-radius:4px 0 0 4px}
-    .hstat:last-child{border-radius:0 4px 4px 0}
-    .hstat-n{font-family:var(--D);font-size:24px;font-weight:900;line-height:1;color:var(--red)}
-    .hstat-l{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--mid);margin-top:1px}
+    .hero-title{font-family:var(--serif);font-size:clamp(26px,3.5vw,40px);font-weight:700;letter-spacing:-.5px;line-height:1;color:var(--ink)}
+    .hero-title em{color:var(--red);font-style:italic}
+    .hero-stats{display:flex;gap:1px}
+    .hstat{background:var(--bg);border:1px solid var(--border);padding:9px 16px;text-align:center;min-width:68px}
+    .hstat:first-child{border-radius:5px 0 0 5px}
+    .hstat:last-child{border-radius:0 5px 5px 0}
+    .hstat:not(:last-child){border-right:none}
+    .hstat-n{font-family:var(--serif);font-size:22px;font-weight:700;line-height:1;color:var(--red)}
+    .hstat-l{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--mid);margin-top:2px;font-family:var(--sans)}
 
-    /* ── TABS ── */
+    /* TABS */
     .tabs{
-      display:flex;
-      background:var(--bg);
-      border-bottom:1.5px solid var(--border);
-      padding:0 32px;
-      overflow-x:auto;
-      gap:0;
+      display:flex;background:var(--bg);
+      border-bottom:1px solid var(--border);
+      padding:0 32px;overflow-x:auto;gap:0;
     }
     .tbtn{
-      background:none;border:none;
-      border-bottom:2px solid transparent;
-      margin-bottom:-1.5px;
-      padding:12px 16px 12px 0;
-      font-family:var(--B);
-      font-size:13px;
-      font-weight:600;
-      cursor:pointer;
-      color:var(--mid);
-      transition:all .12s;
-      white-space:nowrap;
-      margin-right:12px;
-      letter-spacing:.01em;
+      background:none;border:none;border-bottom:2px solid transparent;
+      margin-bottom:-1px;padding:13px 18px 13px 0;
+      font-family:var(--sans);font-size:13px;font-weight:500;
+      cursor:pointer;color:var(--mid);transition:all .12s;
+      white-space:nowrap;margin-right:8px;letter-spacing:.01em;
     }
-    .tbtn.on{color:var(--black);border-bottom-color:var(--red)}
-    .tbtn:hover:not(.on){color:var(--black)}
+    .tbtn.on{color:var(--ink);border-bottom-color:var(--red);font-weight:600}
+    .tbtn:hover:not(.on){color:var(--ink)}
 
-    /* ── CONTENT ── */
-    .content{padding:28px 32px;max-width:900px}
+    /* CONTENT */
+    .content{padding:28px 32px;max-width:860px}
+    .section-hdr{display:flex;align-items:baseline;gap:10px;margin-bottom:22px}
+    .section-title{font-family:var(--serif);font-size:24px;font-weight:700;letter-spacing:-.3px;font-style:italic}
+    .section-count{font-size:12px;color:var(--mid);font-family:var(--sans)}
 
-    .section-hdr{display:flex;align-items:baseline;gap:10px;margin-bottom:20px}
-    .section-title{font-family:var(--S);font-size:26px;font-weight:400;letter-spacing:-.3px}
-    .section-count{font-size:13px;color:var(--mid);font-family:var(--B)}
-
-    /* ── BOOK CARDS ── */
+    /* BOOK CARDS */
     .blist{display:flex;flex-direction:column;gap:2px}
     .bcard{
-      background:var(--card);
-      border:1px solid var(--border);
-      border-radius:8px;
-      padding:14px 16px;
-      display:flex;
-      gap:14px;
-      align-items:flex-start;
-      transition:border-color .15s, box-shadow .15s;
+      background:var(--card);border:1px solid var(--border);border-radius:8px;
+      padding:14px 16px;display:flex;gap:14px;align-items:flex-start;
+      transition:border-color .15s,box-shadow .15s;
     }
-    .bcard:hover{border-color:var(--black);box-shadow:0 2px 12px rgba(26,18,8,.08)}
+    .bcard:hover{border-color:var(--gold);box-shadow:0 2px 14px rgba(26,18,8,.07)}
     .bcover{width:48px;height:68px;object-fit:cover;border-radius:4px;border:1px solid var(--border);flex-shrink:0;background:var(--bg)}
-    .bcover-ph{width:48px;height:68px;background:var(--border);border-radius:4px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--mid)}
-    .brank{font-family:var(--D);font-size:18px;font-weight:700;color:var(--border);min-width:26px;line-height:1;padding-top:4px;flex-shrink:0}
-    .brank.top{color:var(--yellow);-webkit-text-stroke:1px #b8860b}
+    .bcover-ph{width:48px;height:68px;background:var(--gold-light);border-radius:4px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--gold)}
+    .brank{font-family:var(--serif);font-size:16px;font-weight:700;color:var(--border);min-width:24px;line-height:1;padding-top:5px;flex-shrink:0}
+    .brank.top{color:var(--gold)}
     .binfo{flex:1;min-width:0}
-    .btitle{font-family:var(--D);font-size:18px;font-weight:800;text-transform:uppercase;letter-spacing:-.1px;line-height:1.1}
-    .bauthor{font-size:12px;color:var(--mid);margin-top:2px;font-style:italic}
-    .bgenre{display:inline-block;background:var(--yellow);border-radius:3px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:2px 6px;margin-top:5px;color:var(--black)}
+    .btitle{font-family:var(--serif);font-size:17px;font-weight:700;line-height:1.2;color:var(--ink)}
+    .bauthor{font-size:12px;color:var(--mid);margin-top:2px;font-style:italic;font-family:var(--sans)}
+    .bgenre{display:inline-block;background:var(--gold-light);border-radius:3px;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;padding:2px 7px;margin-top:5px;color:var(--gold);border:1px solid #e8d4a0}
     .bratings{display:flex;gap:3px;margin-top:8px;flex-wrap:wrap}
-    .mrat{font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:2px 6px;display:flex;align-items:center;gap:3px}
-    .mrat.unrated{opacity:.3}
+    .mrat{font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:2px 6px;display:flex;align-items:center;gap:3px;font-family:var(--sans)}
+    .mrat.unrated{opacity:.25}
     .mrat .who2{color:var(--mid);font-size:10px}
     .mrat .sc{font-weight:600;color:var(--red)}
     .bcomments{margin-top:8px;display:flex;flex-direction:column;gap:3px}
-    .bcomment{font-size:12px;background:var(--bg);border-left:2px solid var(--yellow);padding:4px 8px;border-radius:0 3px 3px 0;color:var(--mid)}
-    .bcomment strong{color:var(--black);margin-right:4px;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
-    .addedbylbl{font-size:10px;color:var(--border);margin-top:3px}
-    .bdesc-wrap{margin-top:6px}
-    .bdesc{font-size:12px;color:var(--mid);line-height:1.55;font-style:italic;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-    .bdesc.bdesc-open{display:block;overflow:visible;-webkit-line-clamp:unset}
-    .bdesc-toggle{background:none;border:none;padding:2px 0 0;font-size:11px;color:var(--red);cursor:pointer;font-family:var(--B);font-weight:600;display:block;margin-top:2px}
-    .bdesc-toggle:hover{text-decoration:underline}
+    .bcomment{font-size:12px;background:var(--bg);border-left:2px solid var(--gold);padding:4px 8px;border-radius:0 3px 3px 0;color:var(--mid);font-family:var(--sans)}
+    .bcomment strong{color:var(--ink);margin-right:5px;font-size:10px;text-transform:uppercase;letter-spacing:.06em}
+    .addedbylbl{font-size:10px;color:var(--border);margin-top:4px;font-family:var(--sans)}
     .bright{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
-    .avgscore{font-family:var(--D);font-size:34px;font-weight:900;line-height:1;color:var(--black)}
-    .avglbl{font-size:9px;color:var(--mid);text-transform:uppercase;letter-spacing:.08em;text-align:right}
+    .avgscore{font-family:var(--serif);font-size:32px;font-weight:700;line-height:1;color:var(--ink)}
+    .avglbl{font-size:9px;color:var(--mid);text-transform:uppercase;letter-spacing:.1em;text-align:right;font-family:var(--sans)}
     .btn-row{display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end;margin-top:4px}
-    .ratebtn{background:var(--red);color:#fff;border:none;border-radius:4px;padding:4px 10px;font-size:11px;font-weight:600;font-family:var(--B);cursor:pointer;transition:all .12s}
-    .ratebtn:hover{background:var(--black)}
-    .commentbtn{background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:4px 10px;font-size:11px;font-family:var(--B);cursor:pointer;transition:all .12s;color:var(--mid)}
-    .commentbtn:hover{border-color:var(--black);color:var(--black)}
-    .iconbtn{background:none;border:1px solid var(--border);border-radius:4px;padding:4px 7px;font-size:11px;cursor:pointer;transition:all .12s;color:var(--mid)}
-    .iconbtn:hover{border-color:var(--black);color:var(--black)}
-    .delbtn{background:none;border:1px solid var(--border);border-radius:4px;padding:4px 7px;font-size:11px;cursor:pointer;color:var(--mid);transition:all .12s}
+    .ratebtn{background:var(--red);color:#fff;border:none;border-radius:4px;padding:5px 11px;font-size:11px;font-weight:600;font-family:var(--sans);cursor:pointer;transition:all .12s;letter-spacing:.02em}
+    .ratebtn:hover{background:var(--ink)}
+    .commentbtn{background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:5px 11px;font-size:11px;font-family:var(--sans);cursor:pointer;transition:all .12s;color:var(--mid)}
+    .commentbtn:hover{border-color:var(--ink);color:var(--ink)}
+    .iconbtn{background:none;border:1px solid var(--border);border-radius:4px;padding:4px 8px;font-size:11px;cursor:pointer;transition:all .12s;color:var(--mid)}
+    .iconbtn:hover{border-color:var(--ink);color:var(--ink)}
+    .delbtn{background:none;border:1px solid var(--border);border-radius:4px;padding:4px 8px;font-size:11px;cursor:pointer;color:var(--mid);transition:all .12s}
     .delbtn:hover{border-color:var(--red);color:var(--red)}
 
-    /* ── STARS ── */
+    /* STARS */
     .star-row{display:flex;align-items:center;gap:1px;flex-wrap:wrap}
-    .star{background:none;border:none;cursor:pointer;color:var(--border);padding:0;transition:color .1s;line-height:1;position:relative;display:inline-block}
-    .star.star-full{color:var(--yellow)}
-    .star.star-empty{color:var(--border)}
-    .star.star-half{color:var(--border)}
-    .star.readonly{cursor:default;pointer-events:none}
-    .star-label{font-size:13px;font-weight:600;margin-left:6px;color:var(--red);font-family:var(--D)}
-    .star-half-wrap{position:relative;display:inline-block;line-height:1}
-    .star-half-filled{position:absolute;left:0;top:0;width:50%;overflow:hidden;color:var(--yellow);display:inline-block;white-space:nowrap}
-    .star-half-empty{color:var(--border);display:inline-block}
+    .star{background:none;border:none;cursor:pointer;color:var(--border);padding:0;transition:color .1s;line-height:1}
+    .star.filled{color:var(--gold)}
+    .star.readonly{cursor:default}
+    .star-label{font-size:13px;font-weight:600;margin-left:6px;color:var(--red);font-family:var(--serif)}
 
-    /* ── TAB DESCRIPTIONS ── */
-    .tab-desc{font-size:13px;color:var(--mid);margin-bottom:22px;line-height:1.6;max-width:580px;padding:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:6px;border-left:3px solid var(--yellow)}
-
-    /* ── SUGGESTIONS ── */
+    /* SUGGESTIONS */
     .slist{display:flex;flex-direction:column;gap:2px}
     .scard{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px 16px;display:flex;align-items:flex-start;gap:12px;transition:border-color .15s,box-shadow .15s}
-    .scard:hover{border-color:var(--black);box-shadow:0 2px 12px rgba(26,18,8,.08)}
+    .scard:hover{border-color:var(--gold);box-shadow:0 2px 14px rgba(26,18,8,.07)}
     .sinfo{flex:1;min-width:0}
-    .stitle{font-family:var(--D);font-size:17px;font-weight:800;text-transform:uppercase;letter-spacing:-.1px}
-    .sauthor{font-size:12px;color:var(--mid);font-style:italic;margin-top:1px}
-    .smeta{font-size:10px;color:var(--mid);margin-top:3px;text-transform:uppercase;letter-spacing:.05em}
-    .sreason{font-size:12px;color:var(--black);margin-top:6px;padding-left:8px;border-left:2px solid var(--yellow);font-style:italic;color:var(--mid)}
-    .voters{font-size:11px;color:var(--mid);margin-top:4px}
-    .vbtn{display:flex;flex-direction:column;align-items:center;gap:1px;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:7px 11px;cursor:pointer;font-family:var(--B);transition:all .12s;min-width:46px;flex-shrink:0}
+    .stitle{font-family:var(--serif);font-size:16px;font-weight:700;color:var(--ink)}
+    .sauthor{font-size:12px;color:var(--mid);font-style:italic;margin-top:2px;font-family:var(--sans)}
+    .smeta{font-size:10px;color:var(--mid);margin-top:3px;text-transform:uppercase;letter-spacing:.07em;font-family:var(--sans)}
+    .sreason{font-size:12px;margin-top:6px;padding-left:8px;border-left:2px solid var(--gold);font-style:italic;color:var(--mid);font-family:var(--sans)}
+    .voters{font-size:11px;color:var(--mid);margin-top:5px;font-family:var(--sans)}
+    .vbtn{display:flex;flex-direction:column;align-items:center;gap:1px;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:7px 12px;cursor:pointer;font-family:var(--sans);transition:all .12s;min-width:46px;flex-shrink:0}
     .vbtn.on{background:var(--red);border-color:var(--red);color:#fff}
-    .vbtn:hover:not(.on){border-color:var(--black)}
-    .vcnt{font-family:var(--D);font-size:18px;font-weight:900;line-height:1}
-    .vlbl{font-size:9px;text-transform:uppercase;letter-spacing:.07em}
+    .vbtn:hover:not(.on){border-color:var(--ink)}
+    .vcnt{font-family:var(--serif);font-size:18px;font-weight:700;line-height:1}
+    .vlbl{font-size:9px;text-transform:uppercase;letter-spacing:.08em;font-family:var(--sans)}
 
-    /* ── PERSONAL ── */
+    /* PERSONAL */
     .personal-grid{display:flex;flex-direction:column;gap:2px}
-    .personal-who{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px}
-    .pwho-btn{background:none;border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:12px;font-family:var(--B);font-weight:500;cursor:pointer;color:var(--mid);transition:all .12s}
-    .pwho-btn.on{background:var(--black);color:#fff;border-color:var(--black)}
-    .pwho-btn:hover:not(.on){border-color:var(--black);color:var(--black)}
-    .personal-empty{text-align:center;padding:32px;color:var(--mid);font-size:13px;font-style:italic}
+    .personal-empty{text-align:center;padding:32px;color:var(--mid);font-size:13px;font-style:italic;font-family:var(--sans)}
 
-    /* ── AI ── */
-    .ai-intro{font-size:13px;color:var(--mid);margin-bottom:18px;line-height:1.6;max-width:500px}
-    .aibtn{padding:12px 24px;background:var(--red);color:#fff;border:none;border-radius:6px;font-family:var(--D);font-size:18px;font-weight:900;text-transform:uppercase;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:8px;letter-spacing:.02em}
-    .aibtn:hover{background:var(--black)}
+    /* AI */
+    .ai-intro{font-size:13px;color:var(--mid);margin-bottom:20px;line-height:1.7;max-width:520px;font-family:var(--sans)}
+    .aibtn{padding:12px 26px;background:var(--red);color:#fff;border:none;border-radius:6px;font-family:var(--serif);font-size:17px;font-weight:700;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:8px;letter-spacing:.01em}
+    .aibtn:hover{background:var(--ink)}
     .aibtn:disabled{opacity:.5;cursor:not-allowed}
-    .ai-view-only{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:12px 16px;font-size:13px;color:var(--mid);margin-bottom:18px;max-width:480px}
-    .ai-view-only strong{color:var(--black)}
-    .recs-list{display:flex;flex-direction:column;gap:8px;margin-top:20px}
-    .rec-card{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;display:flex;transition:border-color .15s,box-shadow .15s}
-    .rec-card:hover{border-color:var(--black);box-shadow:0 2px 16px rgba(26,18,8,.08)}
-    .rec-rank-col{background:var(--red);padding:14px 16px;display:flex;align-items:center;justify-content:center;min-width:52px;flex-shrink:0}
-    .rec-rank-num{font-family:var(--D);font-size:28px;font-weight:900;color:#fff;line-height:1}
-    .rec-rank-num.gold{color:var(--yellow)}
-    .rec-cover{width:70px;height:100px;object-fit:cover;flex-shrink:0;align-self:stretch;object-position:center}
-    .rec-cover-ph{width:70px;height:100px;background:var(--bg);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--mid)}
-    .rec-body{padding:14px 16px;flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
-    .rec-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap}
-    .rec-title{font-family:var(--D);font-size:18px;font-weight:800;text-transform:uppercase;letter-spacing:-.1px;color:var(--black);line-height:1.1}
-    .rec-author{font-size:12px;color:var(--mid);font-style:italic;margin-top:2px}
-    .rec-tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:2px}
-    .rec-genre-tag{display:inline-block;background:var(--yellow);border-radius:3px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:2px 7px;color:var(--black)}
-    .rec-from{display:inline-block;background:var(--bg);border:1px solid var(--border);font-size:9px;border-radius:3px;padding:2px 7px;text-transform:uppercase;letter-spacing:.05em;color:var(--mid)}
-    .rec-section-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--mid);margin-top:4px}
-    .rec-blurb{font-size:13px;line-height:1.6;color:var(--black);font-style:italic}
-    .rec-why{font-size:12px;line-height:1.6;color:var(--mid)}
-    .rec-overlap{font-size:11px;color:var(--red);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
-    .rec-footer{display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap}
-    .rec-match{display:inline-block;background:var(--yellow);color:var(--black);font-family:var(--D);font-size:12px;font-weight:700;border-radius:3px;padding:3px 10px}
-    .rec-expand-btn{background:none;border:1px solid var(--border);border-radius:4px;padding:3px 10px;font-size:11px;font-family:var(--B);font-weight:500;cursor:pointer;color:var(--mid);transition:all .12s}
-    .rec-expand-btn:hover{border-color:var(--black);color:var(--black)}
-    .rec-members{display:flex;flex-direction:column;gap:5px;margin-top:8px;padding:10px 12px;background:var(--bg);border-radius:6px;border:1px solid var(--border)}
-    .rec-member-row{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
-    .rec-member-name{font-size:11px;font-weight:700;color:var(--black);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;min-width:60px}
-    .rec-member-reason{font-size:11px;color:var(--mid);font-style:italic}
-    .rec-vote-col{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px 14px;border-left:1px solid var(--border);flex-shrink:0;gap:4px;min-width:60px}
-    .rec-vote-btn{background:none;border:1.5px solid var(--border);border-radius:6px;padding:6px 10px;cursor:pointer;font-family:var(--D);font-size:18px;font-weight:900;color:var(--mid);transition:all .12s;width:100%}
-    .rec-vote-btn.voted{background:var(--red);border-color:var(--red);color:#fff}
-    .rec-vote-btn:hover:not(.voted){border-color:var(--black);color:var(--black)}
-    .rec-vote-count{font-family:var(--D);font-size:20px;font-weight:900;color:var(--black);line-height:1}
-    .rec-vote-label{font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--mid)}
-    .rec-refresh-row{display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap}
-    .rec-refresh-note{font-size:12px;color:var(--mid);font-style:italic}
-    .no-recs{padding:32px 0;color:var(--mid);font-size:13px;font-style:italic}
-    .ai-data-warning{background:var(--yellow);border-radius:6px;padding:10px 14px;font-size:13px;font-weight:500;margin-bottom:16px;max-width:560px;color:var(--black)}
+    .ai-status{font-size:13px;color:var(--mid);margin-top:14px;font-style:italic;font-family:var(--sans);display:flex;align-items:center;gap:8px}
+    .ai-status::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--gold);display:inline-block;animation:pulse 1.2s ease-in-out infinite}
+    @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
+    .ai-view-only{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:12px 16px;font-size:13px;color:var(--mid);margin-bottom:18px;max-width:460px;font-family:var(--sans)}
+    .ai-view-only strong{color:var(--ink)}
+    .recs-list{display:flex;flex-direction:column;gap:3px;margin-top:22px;max-width:700px}
+    .rec-card{background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden;display:flex;transition:border-color .15s,box-shadow .15s}
+    .rec-card:hover{border-color:var(--gold);box-shadow:0 2px 14px rgba(26,18,8,.07)}
+    .rec-rank-col{background:var(--ink);padding:12px 14px;display:flex;align-items:center;justify-content:center;min-width:50px;flex-shrink:0}
+    .rec-rank-num{font-family:var(--serif);font-size:24px;font-weight:700;color:#fff;line-height:1}
+    .rec-rank-num.gold{color:var(--gold)}
+    .rec-cover{width:56px;height:80px;object-fit:cover;flex-shrink:0}
+    .rec-cover-ph{width:56px;height:80px;background:var(--gold-light);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--gold)}
+    .rec-body{padding:12px 14px;flex:1;min-width:0}
+    .rec-title{font-family:var(--serif);font-size:16px;font-weight:700;color:var(--ink);line-height:1.2}
+    .rec-author{font-size:11px;color:var(--mid);font-style:italic;margin-top:3px;font-family:var(--sans)}
+    .rec-from-sugg{display:inline-block;background:var(--gold-light);border:1px solid #e8d4a0;font-size:9px;border-radius:3px;padding:1px 6px;text-transform:uppercase;letter-spacing:.07em;color:var(--gold);margin-left:6px;vertical-align:middle;font-family:var(--sans);font-weight:600}
+    .rec-blurb{font-size:12px;line-height:1.65;margin-top:7px;color:var(--ink);font-style:italic;padding:7px 10px;background:var(--bg);border-radius:4px;border-left:2px solid var(--gold);font-family:var(--sans)}
+    .rec-why{font-size:12px;line-height:1.6;margin-top:6px;color:var(--mid);font-family:var(--sans)}
+    .rec-overlap{font-size:10px;color:var(--red);font-weight:600;margin-top:5px;text-transform:uppercase;letter-spacing:.06em;font-family:var(--sans)}
+    .rec-members{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
+    .rec-member-chip{background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:2px 9px;font-size:10px;font-family:var(--sans);color:var(--mid)}
+    .rec-member-chip strong{color:var(--ink);font-weight:600}
+    .rec-footer{display:flex;align-items:center;gap:8px;margin-top:8px}
+    .rec-match{display:inline-block;background:var(--ink);color:#fff;font-family:var(--sans);font-size:11px;font-weight:600;border-radius:3px;padding:2px 9px;letter-spacing:.02em}
+    .no-recs{padding:32px 0;color:var(--mid);font-size:13px;font-style:italic;font-family:var(--sans)}
+    .ai-data-warning{background:var(--gold-light);border:1px solid #e8d4a0;border-radius:6px;padding:10px 14px;font-size:13px;font-weight:500;margin-bottom:18px;max-width:560px;color:var(--ink);font-family:var(--sans)}
 
-    /* ── FORMS ── */
-    .addbtn{display:flex;align-items:center;gap:7px;background:none;border:1px dashed var(--border);border-radius:6px;padding:11px 16px;width:100%;cursor:pointer;color:var(--mid);font-family:var(--B);font-size:13px;transition:all .12s;margin-top:10px}
-    .addbtn:hover{border-color:var(--black);color:var(--black);background:var(--card)}
-    .aform{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:18px;margin-top:10px;display:flex;flex-direction:column;gap:12px;box-shadow:0 2px 12px rgba(26,18,8,.06)}
+    /* FORMS */
+    .addbtn{display:flex;align-items:center;gap:7px;background:none;border:1px dashed var(--border);border-radius:6px;padding:11px 16px;width:100%;cursor:pointer;color:var(--mid);font-family:var(--sans);font-size:13px;transition:all .12s;margin-top:10px}
+    .addbtn:hover{border-color:var(--ink);color:var(--ink);background:var(--card)}
+    .aform{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:18px;margin-top:10px;display:flex;flex-direction:column;gap:12px;box-shadow:0 2px 14px rgba(26,18,8,.06)}
     .frow{display:flex;gap:10px;flex-wrap:wrap}
     .fgrp{display:flex;flex-direction:column;gap:4px;flex:1;min-width:140px}
-    .fgrp label{font-size:10px;text-transform:uppercase;letter-spacing:.1em;font-weight:600;color:var(--mid)}
-    .fgrp input,.fgrp select,.fgrp textarea{padding:8px 10px;border:1px solid var(--border);border-radius:5px;background:#fff;font-family:var(--B);font-size:13px;color:var(--black);outline:none;transition:border-color .12s;width:100%}
+    .fgrp label{font-size:10px;text-transform:uppercase;letter-spacing:.12em;font-weight:600;color:var(--mid);font-family:var(--sans)}
+    .fgrp input,.fgrp select,.fgrp textarea{padding:8px 10px;border:1px solid var(--border);border-radius:5px;background:#fff;font-family:var(--sans);font-size:13px;color:var(--ink);outline:none;transition:border-color .12s;width:100%}
     .fgrp textarea{resize:vertical;min-height:65px}
     .fgrp input:focus,.fgrp select:focus,.fgrp textarea:focus{border-color:var(--red)}
     .factions{display:flex;gap:7px;margin-top:2px}
-    .bprimary{background:var(--black);color:#fff;border:none;border-radius:5px;padding:9px 18px;font-family:var(--B);font-size:12px;font-weight:600;cursor:pointer;transition:all .12s}
+    .bprimary{background:var(--ink);color:#fff;border:none;border-radius:5px;padding:9px 18px;font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;transition:all .12s;letter-spacing:.02em}
     .bprimary:hover{background:var(--red)}
-    .bcancel{background:none;border:1px solid var(--border);border-radius:5px;color:var(--mid);padding:9px 14px;font-family:var(--B);font-size:12px;cursor:pointer;transition:all .12s}
-    .bcancel:hover{border-color:var(--black);color:var(--black)}
-    .rlbl{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--mid);margin-bottom:7px;font-weight:600}
+    .bcancel{background:none;border:1px solid var(--border);border-radius:5px;color:var(--mid);padding:9px 14px;font-family:var(--sans);font-size:12px;cursor:pointer;transition:all .12s}
+    .bcancel:hover{border-color:var(--ink);color:var(--ink)}
+    .rlbl{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:var(--mid);margin-bottom:7px;font-weight:600;font-family:var(--sans)}
     .selected-cover{display:flex;align-items:center;gap:10px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:5px}
     .selected-cover img{width:32px;height:46px;object-fit:cover;border-radius:3px}
-    .selected-cover span{font-size:12px;color:var(--mid);font-style:italic}
+    .selected-cover span{font-size:12px;color:var(--mid);font-style:italic;font-family:var(--sans)}
     .cover-upload-wrap{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-    .cover-upload-btn{background:none;border:1px solid var(--border);border-radius:5px;padding:7px 12px;font-size:12px;font-family:var(--B);cursor:pointer;color:var(--mid);transition:all .12s;white-space:nowrap}
-    .cover-upload-btn:hover{border-color:var(--black);color:var(--black)}
-    .cover-upload-hint{font-size:11px;color:var(--mid);font-style:italic}
+    .cover-upload-btn{background:none;border:1px solid var(--border);border-radius:5px;padding:7px 12px;font-size:12px;font-family:var(--sans);cursor:pointer;color:var(--mid);transition:all .12s;white-space:nowrap}
+    .cover-upload-btn:hover{border-color:var(--ink);color:var(--ink)}
+    .cover-upload-hint{font-size:11px;color:var(--mid);font-style:italic;font-family:var(--sans)}
 
-    /* ── SEARCH ── */
-    .search-input{padding:8px 10px;border:1px solid var(--border);border-radius:5px;background:#fff;font-family:var(--B);font-size:13px;color:var(--black);outline:none;width:100%;transition:border-color .12s}
+    /* SEARCH */
+    .search-input{padding:8px 10px;border:1px solid var(--border);border-radius:5px;background:#fff;font-family:var(--sans);font-size:13px;color:var(--ink);outline:none;width:100%;transition:border-color .12s}
     .search-input:focus{border-color:var(--red)}
-    .search-loading{font-size:12px;color:var(--mid);padding:5px 0;font-style:italic}
-    .search-dropdown{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--black);border-top:none;border-radius:0 0 6px 6px;z-index:300;box-shadow:0 8px 24px rgba(26,18,8,.12);max-height:260px;overflow-y:auto}
+    .search-loading{font-size:12px;color:var(--mid);padding:5px 0;font-style:italic;font-family:var(--sans)}
+    .search-dropdown{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--ink);border-top:none;border-radius:0 0 6px 6px;z-index:300;box-shadow:0 8px 24px rgba(26,18,8,.12);max-height:260px;overflow-y:auto}
     .search-result{display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;transition:background .1s;border-bottom:1px solid var(--border)}
     .search-result:last-child{border-bottom:none}
     .search-result:hover{background:var(--bg)}
     .search-cover{width:28px;height:40px;object-fit:cover;border-radius:2px;flex-shrink:0}
-    .search-cover-ph{width:28px;height:40px;background:var(--border);border-radius:2px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px}
-    .search-result-title{font-family:var(--D);font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:-.1px}
-    .search-result-author{font-size:11px;color:var(--mid);font-style:italic;margin-top:1px}
+    .search-cover-ph{width:28px;height:40px;background:var(--gold-light);border-radius:2px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px}
+    .search-result-title{font-family:var(--serif);font-size:14px;font-weight:700;color:var(--ink)}
+    .search-result-author{font-size:11px;color:var(--mid);font-style:italic;margin-top:1px;font-family:var(--sans)}
 
-    /* ── MODAL ── */
-    .overlay{position:fixed;inset:0;background:rgba(26,18,8,.5);z-index:400;display:flex;align-items:center;justify-content:center;padding:16px}
+    /* MODAL */
+    .overlay{position:fixed;inset:0;background:rgba(26,18,8,.55);z-index:400;display:flex;align-items:center;justify-content:center;padding:16px}
     .modal{background:#fff;border-radius:10px;border:1px solid var(--border);padding:24px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(26,18,8,.2);max-height:90vh;overflow-y:auto}
-    .modal h3{font-family:var(--S);font-size:18px;font-weight:700;letter-spacing:-.3px;margin-bottom:3px}
-    .modal p{font-size:12px;color:var(--mid);margin-bottom:14px}
-    .modal-textarea{padding:8px 10px;border:1px solid var(--border);border-radius:5px;font-family:var(--B);font-size:13px;outline:none;resize:vertical;width:100%;min-height:80px;transition:border-color .12s}
+    .modal h3{font-family:var(--serif);font-size:20px;font-weight:700;letter-spacing:-.2px;margin-bottom:3px;font-style:italic}
+    .modal p{font-size:12px;color:var(--mid);margin-bottom:14px;font-family:var(--sans)}
+    .modal-textarea{padding:8px 10px;border:1px solid var(--border);border-radius:5px;font-family:var(--sans);font-size:13px;outline:none;resize:vertical;width:100%;min-height:80px;transition:border-color .12s}
     .modal-textarea:focus{border-color:var(--red)}
 
     .empty{text-align:center;padding:40px 28px;color:var(--mid)}
-    .empty-title{font-family:var(--S);font-size:22px;font-style:italic;color:var(--border)}
-    .empty-sub{font-size:13px;margin-top:4px}
-    .need-name{background:var(--yellow);border-radius:5px;padding:9px 14px;font-size:13px;font-weight:500;margin-bottom:12px;color:var(--black)}
-    .no-name-banner{background:var(--yellow);border-radius:6px;padding:11px 16px;font-size:13px;font-weight:500;margin-bottom:20px;color:var(--black);display:flex;align-items:center;gap:8px}
-    .aierr{margin-top:14px;padding:14px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--red);font-size:13px}
+    .empty-title{font-family:var(--serif);font-size:22px;font-style:italic;color:var(--border)}
+    .empty-sub{font-size:13px;margin-top:4px;font-family:var(--sans)}
+    .need-name{background:var(--gold-light);border:1px solid #e8d4a0;border-radius:5px;padding:9px 14px;font-size:13px;font-weight:500;margin-bottom:12px;color:var(--ink);font-family:var(--sans)}
+    .aierr{margin-top:14px;padding:14px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--red);font-size:13px;font-family:var(--sans)}
 
     @media(max-width:640px){
       .hdr{padding:0 16px}
-      .hero{padding:12px 16px}
+      .hero{padding:14px 16px}
       .tabs{padding:0 16px}
       .content{padding:20px 16px}
       .bcard{flex-wrap:wrap}
@@ -983,11 +650,11 @@ IMPORTANT: memberMatch must ONLY include members who appear in the personal read
     <div className="app">
       <style>{CSS}</style>
 
-      {/* ── HEADER ── */}
+      {/* HEADER */}
       <div className="hdr">
-        <div className="logo">BOOKED<span>.</span>IN</div>
+        <div className="logo">Booked<span>.</span>In</div>
         <div className="hdr-right">
-          <span className="user-label">Who are you?</span>
+          <span className="user-label">I am</span>
           <select className={`user-dropdown ${!currentUser?"unset":""}`} value={currentUser} onChange={e=>setCurrentUser(e.target.value)}>
             <option value="">Select name…</option>
             {MEMBERS.map(m=><option key={m} value={m}>{m}</option>)}
@@ -995,13 +662,13 @@ IMPORTANT: memberMatch must ONLY include members who appear in the personal read
         </div>
       </div>
 
-      {/* ── SLIM HERO ── */}
+      {/* HERO */}
       <div className="hero">
         <div className="hero-title">
-          {tab==="library"&&<><em>Booked In</em> Library</>}
-          {tab==="suggestions"&&<>What&apos;s <em>Next?</em></>}
-          {tab==="recommend"&&<>AI <em>Recommendations</em></>}
-          {tab==="personal"&&<><em>Personal</em> Library</>}
+          {tab==="library"&&<><em>Our</em> Reading List</>}
+          {tab==="suggestions"&&<>What's <em>Next?</em></>}
+          {tab==="recommend"&&<><em>AI</em> Top 10</>}
+          {tab==="personal"&&<><em>My</em> Books</>}
         </div>
         <div className="hero-stats">
           <div className="hstat"><div className="hstat-n">{books.length}</div><div className="hstat-l">Read</div></div>
@@ -1010,24 +677,18 @@ IMPORTANT: memberMatch must ONLY include members who appear in the personal read
         </div>
       </div>
 
-      {/* ── TABS ── */}
+      {/* TABS */}
       <div className="tabs">
-        {[["library","📚 Booked In Library"],["suggestions","💡 Suggestions"],["recommend","✨ AI Recommendations"],["personal","👤 Personal Library"]].map(([id,lbl])=>(
+        {[["library","📚 Library"],["suggestions","💡 Suggestions"],["recommend","✨ AI Top 10"],["personal","👤 My Books"]].map(([id,lbl])=>(
           <button key={id} className={`tbtn ${tab===id?"on":""}`} onClick={()=>setTab(id)}>{lbl}</button>
         ))}
       </div>
 
       <div className="content">
-        {!currentUser&&(
-          <div className="no-name-banner">
-            👋 <strong>Select your name</strong> in the top right to rate books, add suggestions, and more.
-          </div>
-        )}
 
-        {/* ── LIBRARY ── */}
+        {/* LIBRARY */}
         {tab==="library"&&(
           <div>
-            <p className="tab-desc">Every book the club has read together, ranked by average member rating. Rate books, leave notes, and keep the record straight.</p>
             <div className="section-hdr">
               <div className="section-title">Books we've read</div>
               <div className="section-count">{books.length} books</div>
@@ -1042,19 +703,18 @@ IMPORTANT: memberMatch must ONLY include members who appear in the personal read
                     <div className="btitle">{book.title}</div>
                     <div className="bauthor">{book.author}</div>
                     <span className="bgenre">{book.genre}</span>
-                    {book.description&&<BlurbText text={book.description}/>}
                     <div className="bratings">
                       {Object.entries(book.ratings||{}).map(([m,r])=>(
-                        <div key={m} className="mrat"><span className="who2">{m}</span><span className="sc">{fromBookRating(r)}/10</span></div>
+                        <div key={m} className="mrat"><span className="who2">{m}</span><span className="sc">{r}/10</span></div>
                       ))}
                       {MEMBERS.filter(m=>!(book.ratings||{})[m]).map(m=>(
                         <div key={m} className="mrat unrated"><span className="who2">{m}</span><span className="sc">–</span></div>
                       ))}
                     </div>
-                    {Object.entries(book.comments||{}).filter(([,c])=>c?.trim()).length>0&&(
+                    {Object.entries(book.comments||{}).length>0&&(
                       <div className="bcomments">
-                        {Object.entries(book.comments||{}).filter(([,c])=>c?.trim()).map(([m,c])=>(
-                          <div key={m} className="bcomment"><strong>{m}</strong>{" "}{c}</div>
+                        {Object.entries(book.comments||{}).map(([m,c])=>(
+                          <div key={m} className="bcomment"><strong>{m}</strong>{c}</div>
                         ))}
                       </div>
                     )}
@@ -1063,20 +723,22 @@ IMPORTANT: memberMatch must ONLY include members who appear in the personal read
                   <div className="bright">
                     <div><div className="avgscore">{avgRating(book.ratings)||"—"}</div><div className="avglbl">avg/10</div></div>
                     <div className="btn-row">
-                      <button className="ratebtn" onClick={()=>{
-                        if (!currentUser) return;
-                        setRateModal(book);
-                        setMyRating(fromBookRating((book.ratings||{})[currentUser])||7);
-                        setMyComment((book.comments||{})[currentUser]||"");
-                      }}>
-                        {currentUser&&(book.ratings||{})[currentUser]!=null?"Rated ✓":"Rate"}
-                      </button>
-                      <button className="iconbtn" onClick={()=>{setEditModal(book);setEditForm({title:book.title,author:book.author,genre:book.genre,cover:book.cover,description:book.description||""})}}>Edit</button>
+                      {currentUser&&!(book.ratings||{})[currentUser]&&(
+                        <button className="ratebtn" onClick={()=>{setRateModal(book);setMyRating(7)}}>Rate</button>
+                      )}
+                      {currentUser&&(
+                        <button className="commentbtn" onClick={()=>{setCommentModal(book);setMyComment((book.comments||{})[currentUser]||"")}}>
+                          {(book.comments||{})[currentUser]?"Edit note":"Note"}
+                        </button>
+                      )}
+                      <button className="iconbtn" onClick={()=>{setEditModal(book);setEditForm({title:book.title,author:book.author,genre:book.genre,cover:book.cover,description:book.description})}}>✏️</button>
+                      <button className="delbtn" onClick={()=>deleteBook(book.id)}>✕</button>
                     </div>
                   </div>
                 </div>
               ))}
             </div>
+            {!currentUser&&<div className="need-name">Select your name at the top to add or rate books.</div>}
             {currentUser&&(showAddBook?(
               <div className="aform">
                 <div className="fgrp" style={{position:"relative"}}>
@@ -1104,10 +766,9 @@ IMPORTANT: memberMatch must ONLY include members who appear in the personal read
           </div>
         )}
 
-        {/* ── SUGGESTIONS ── */}
+        {/* SUGGESTIONS */}
         {tab==="suggestions"&&(
           <div>
-            <p className="tab-desc">Suggest books you'd love the club to read next. Vote for your favourites — the most-voted ideas rise to the top.</p>
             <div className="section-hdr">
               <div className="section-title">Suggestions</div>
               <div className="section-count">{suggestions.length} ideas</div>
@@ -1121,7 +782,6 @@ IMPORTANT: memberMatch must ONLY include members who appear in the personal read
                     <div className="stitle">{s.title}</div>
                     <div className="sauthor">{s.author}</div>
                     <div className="smeta">{s.genre} · Suggested by {s.suggested_by}</div>
-                    {s.description&&<BlurbText text={s.description}/>}
                     {s.reason&&<div className="sreason">{s.reason}</div>}
                     {s.votes?.length>0&&<div className="voters">👍 {s.votes.join(", ")}</div>}
                   </div>
@@ -1132,12 +792,12 @@ IMPORTANT: memberMatch must ONLY include members who appear in the personal read
                         <span className="vlbl">{s.votes?.includes(currentUser)?"✓":"Vote"}</span>
                       </button>
                     )}
-                    <button className="iconbtn" onClick={()=>{setEditSuggModal(s);setEditSuggForm({title:s.title,author:s.author,genre:s.genre,description:s.description||""});}}>Edit</button>
                     <button className="delbtn" onClick={()=>deleteSuggestion(s.id)}>✕</button>
                   </div>
                 </div>
               ))}
             </div>
+            {!currentUser&&<div className="need-name">Select your name at the top to add suggestions.</div>}
             {currentUser&&(showAddSugg?(
               <div className="aform">
                 <div className="fgrp" style={{position:"relative"}}>
@@ -1165,77 +825,83 @@ IMPORTANT: memberMatch must ONLY include members who appear in the personal read
           </div>
         )}
 
+        {/* AI TOP 10 */}
         {tab==="recommend"&&(
           <div>
-            <div className="section-hdr"><div className="section-title">AI Recommendations</div></div>
-            <p className="tab-desc">Claude analyses everyone's personal reading lists (books rated 7+/10) to find crossover in taste — then picks the books most likely to be loved by the whole group. Once generated, the list stays until Ellie refreshes it. Everyone gets one vote for the book they want to read next.</p>
-            {personalBooks.filter(b=>(fromStoredRating(b.rating)||0)>=7).length < 3 && (
+            <div className="section-hdr"><div className="section-title">AI Top 10</div></div>
+            <p className="ai-intro">Claude analyses everyone's personal reading lists (rated 7+/10), researches current prize-winners and acclaimed books across the web, then picks the 10 most likely to be loved by the whole group. Member suggestions feed in as a strong secondary signal.</p>
+            {personalBooks.filter(b=>(b.rating||0)>=7).length < 3 && (
               <div className="ai-data-warning">💡 The more books everyone adds to their personal reading list with ratings, the better the recommendations will be!</div>
             )}
             {currentUser===ADMIN?(
-              <div className="rec-refresh-row">
-                <button className="aibtn" onClick={getAIRecs} disabled={aiLoading}>
-                  {aiLoading?"Analysing everyone's taste…":aiRecs.length?"🔄 Refresh Top 10":"✦ Generate Top 10"}
-                </button>
-                {aiRecs.length>0&&!aiLoading&&<span className="rec-refresh-note">Results are saved until you refresh</span>}
-              </div>
+              <button className="aibtn" onClick={getAIRecs} disabled={aiLoading}>
+                {aiLoading ? "✦ Working…" : "✦ Generate Top 10"}
+              </button>
             ):(
               <div className="ai-view-only"><strong>Only Ellie can generate this list.</strong> Ask her to run it at your next meeting!</div>
+            )}
+            {aiLoading && aiStatus && (
+              <div className="ai-status">{aiStatus}</div>
             )}
             {aiRecs.length===0&&!aiLoading&&(
               <div className="no-recs">{currentUser===ADMIN?"Hit the button above — the more personal books everyone has added, the better!":"Ask Ellie to generate the list!"}</div>
             )}
             {aiRecs.length>0&&!aiRecs[0]?.error&&(
               <div className="recs-list">
-                {aiRecs.map(rec=>{
-                  const voteCount = Object.values(aiVotes).filter(v=>v===rec.rank).length;
-                  const iVoted = aiVotes[currentUser]===rec.rank;
-                  return (
-                    <RecCard key={rec.rank} rec={rec} voteCount={voteCount} iVoted={iVoted}
-                      onVote={()=>toggleAiVote(rec.rank)} currentUser={currentUser}/>
-                  );
-                })}
-                {Object.keys(aiVotes).length>0&&(
-                  <div style={{marginTop:14,padding:"10px 14px",background:"var(--card)",border:"1px solid var(--border)",borderRadius:6,fontSize:12}}>
-                    <strong style={{fontSize:11,textTransform:"uppercase",letterSpacing:".04em"}}>Votes so far:</strong>
-                    <span style={{color:"var(--mid)",marginLeft:8}}>
-                      {Object.entries(aiVotes).map(([member,rank])=>`${member} → #${rank}`).join(" · ")}
-                    </span>
+                {aiRecs.map(rec=>(
+                  <div key={rec.rank} className="rec-card">
+                    <div className="rec-rank-col">
+                      <div className={`rec-rank-num ${rec.rank<=3?"gold":""}`}>{rec.rank}</div>
+                    </div>
+                    {rec.cover?<img src={rec.cover} alt="" className="rec-cover"/>:<div className="rec-cover-ph">📖</div>}
+                    <div className="rec-body">
+                      <div className="rec-title">
+                        {rec.title}
+                        {rec.fromSuggestions&&<span className="rec-from-sugg">suggested</span>}
+                      </div>
+                      <div className="rec-author">by {rec.author} · {rec.genre}</div>
+                      {rec.blurb&&<div className="rec-blurb">{rec.blurb}</div>}
+                      <div className="rec-why">{rec.whyThisBook}</div>
+                      {rec.tasteOverlap&&<div className="rec-overlap">✦ {rec.tasteOverlap}</div>}
+                      {rec.memberMatch&&rec.memberMatch.length>0&&(
+                        <div className="rec-members">
+                          {rec.memberMatch.map((m,i)=>(
+                            <div key={i} className="rec-member-chip">
+                              <strong>{m.name}</strong> — {m.reason}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="rec-footer">
+                        <div className="rec-match">{rec.matchScore}% group match</div>
+                      </div>
+                    </div>
                   </div>
-                )}
+                ))}
               </div>
             )}
-            {aiRecs[0]?.error&&<div className="aierr">Error: {aiRecs[0].msg || "Couldn't get recommendations — try again in a moment."}</div>}
+            {aiRecs[0]?.error&&<div className="aierr">Couldn't get recommendations — try again in a moment.</div>}
           </div>
         )}
 
-        {/* ── PERSONAL LIBRARY ── */}
+        {/* MY BOOKS (PERSONAL) */}
         {tab==="personal"&&(
           <div>
             <div className="section-hdr">
-              <div className="section-title">Personal Library</div>
+              <div className="section-title">Personal reading lists</div>
             </div>
-            <p className="tab-desc">Everyone's personal reading list — books you've read outside of book club. Add your own reads with ratings; the AI uses highly-rated books (7+/10) to power its recommendations.</p>
-            {/* Member selector — independent from the global user selector */}
             <div style={{marginBottom:20}}>
-              <select
-                className="user-dropdown"
-                value={personalUser}
-                onChange={e=>setPersonalUser(e.target.value)}
-                style={{minWidth:160}}
-              >
+              <select className="user-dropdown" value={currentUser} onChange={e=>setCurrentUser(e.target.value)} style={{minWidth:160,background:"var(--card)",border:"1px solid var(--border)",color:"var(--ink)",backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%231A1208' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E\")"}}>
                 <option value="">Select a member…</option>
                 {MEMBERS.map(m=><option key={m} value={m}>{m}</option>)}
               </select>
             </div>
-
-            {!personalUser&&<div className="need-name">Select a member above to see their personal reading list.</div>}
-
-            {personalUser&&(
+            {!currentUser&&<div className="need-name">Select a member above to see their personal reading list.</div>}
+            {currentUser&&(
               <>
                 <div style={{marginBottom:16}}>
-                  <strong style={{fontFamily:"var(--D)",fontSize:18,textTransform:"uppercase",letterSpacing:"-.1px"}}>{personalUser}'s personal reads</strong>
-                  <span style={{fontSize:12,color:"var(--mid)",marginLeft:8}}>{myPersonalBooks.length} books</span>
+                  <span style={{fontFamily:"var(--serif)",fontSize:18,fontWeight:700,fontStyle:"italic"}}>{currentUser}'s reads</span>
+                  <span style={{fontSize:12,color:"var(--mid)",marginLeft:8,fontFamily:"var(--sans)"}}>{myPersonalBooks.length} books</span>
                 </div>
                 {myPersonalBooks.length===0&&<div className="personal-empty">Nothing added yet — add your first personal read below!</div>}
                 <div className="personal-grid">
@@ -1246,11 +912,10 @@ IMPORTANT: memberMatch must ONLY include members who appear in the personal read
                         <div className="btitle">{book.title}</div>
                         <div className="bauthor">{book.author}</div>
                         <span className="bgenre">{book.genre}</span>
-                        {book.description&&<BlurbText text={book.description}/>}
                         {book.comment&&<div className="bcomments"><div className="bcomment"><span>{book.comment}</span></div></div>}
                       </div>
                       <div className="bright">
-                        <div><div className="avgscore">{fromStoredRating(book.rating)||"—"}</div><div className="avglbl">/ 10</div></div>
+                        <div><div className="avgscore">{book.rating||"—"}</div><div className="avglbl">/ 10</div></div>
                         <div className="btn-row">
                           <button className="commentbtn" onClick={()=>{setCommentPersonalModal(book);setPersonalComment(book.comment||"")}}>
                             {book.comment?"Edit note":"Note"}
@@ -1284,7 +949,7 @@ IMPORTANT: memberMatch must ONLY include members who appear in the personal read
                     </div>
                   </div>
                 ):(
-                  <button className="addbtn" onClick={()=>setShowAddPersonal(true)}>＋ Add to {personalUser}'s reading list</button>
+                  <button className="addbtn" onClick={()=>setShowAddPersonal(true)}>＋ Add to {currentUser}'s reading list</button>
                 )}
               </>
             )}
@@ -1292,34 +957,33 @@ IMPORTANT: memberMatch must ONLY include members who appear in the personal read
         )}
       </div>
 
-      {/* Rate & Note modal */}
+      {/* Rate modal */}
       {rateModal&&(
         <div className="overlay" onClick={()=>setRateModal(null)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
             <h3>{rateModal.title}</h3>
-            <p>by {rateModal.author} · as {currentUser}</p>
-            <div className="rlbl" style={{marginBottom:8}}>Your Score Out of 10</div>
+            <p>by {rateModal.author} · rating as {currentUser}</p>
+            <div className="rlbl">Your Score Out of 10</div>
             <StarRating value={myRating} onChange={setMyRating}/>
-            <div className="rlbl" style={{marginTop:16,marginBottom:6}}>Your Note <span style={{fontWeight:400,textTransform:"none",letterSpacing:0}}>(optional)</span></div>
+            <div className="factions" style={{marginTop:18}}>
+              <button className="bprimary" onClick={()=>rateBook(rateModal.id)}>Save</button>
+              <button className="bcancel" onClick={()=>setRateModal(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Comment modal */}
+      {commentModal&&(
+        <div className="overlay" onClick={()=>setCommentModal(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <h3>{commentModal.title}</h3>
+            <p>Your thoughts · as {currentUser}</p>
+            <div className="rlbl">Your Note</div>
             <textarea className="modal-textarea" value={myComment} onChange={e=>setMyComment(e.target.value)} placeholder="What did you think? Any favourite moments?"/>
             <div className="factions" style={{marginTop:14}}>
-              <button className="bprimary" onClick={async()=>{
-                const book = books.find(b=>b.id===rateModal.id);
-                const storedRating = toBookRating(myRating);
-                const updRatings = {...(book.ratings||{}), [currentUser]: storedRating};
-                const updComments = {...(book.comments||{}), [currentUser]: myComment};
-                console.log("Saving rating:", {storedRating, myRating, updRatings});
-                const { error } = await supabase.from("books").update({ratings:updRatings, comments:updComments}).eq("id",rateModal.id);
-                if (error) {
-                  console.error("Rate save error:", JSON.stringify(error));
-                  alert("Error saving: " + (error.message || error.details || JSON.stringify(error)));
-                  return;
-                }
-                await fetchAll();
-                setRateModal(null);
-                setMyComment("");
-              }}>Save</button>
-              <button className="bcancel" onClick={()=>{setRateModal(null);setMyComment("");}}>Cancel</button>
+              <button className="bprimary" onClick={()=>saveComment(commentModal.id)}>Save Note</button>
+              <button className="bcancel" onClick={()=>setCommentModal(null)}>Cancel</button>
             </div>
           </div>
         </div>
@@ -1334,35 +998,10 @@ IMPORTANT: memberMatch must ONLY include members who appear in the personal read
               <div className="fgrp"><label>Title</label><input value={editForm.title||""} onChange={e=>setEditForm(f=>({...f,title:e.target.value}))}/></div>
               <div className="fgrp"><label>Author</label><input value={editForm.author||""} onChange={e=>setEditForm(f=>({...f,author:e.target.value}))}/></div>
               <div className="fgrp"><label>Genre</label><select value={editForm.genre||"Fiction"} onChange={e=>setEditForm(f=>({...f,genre:e.target.value}))}>{GENRES.map(g=><option key={g}>{g}</option>)}</select></div>
-              <div className="fgrp">
-                <label>Blurb / Description</label>
-                <textarea value={editForm.description||""} onChange={e=>setEditForm(f=>({...f,description:e.target.value}))} placeholder="A short description of the book…" style={{minHeight:80,resize:"vertical",padding:"8px 10px",border:"1px solid var(--border)",borderRadius:5,fontFamily:"var(--B)",fontSize:13,outline:"none",width:"100%"}}/>
-                <button
-                  type="button"
-                  className="cover-upload-btn"
-                  style={{marginTop:5,alignSelf:"flex-start"}}
-                  onClick={async(e)=>{
-                    const btn = e.currentTarget;
-                    btn.textContent = "Fetching…";
-                    btn.disabled = true;
-                    const results = await searchGoogleBooks(`${editForm.title} ${editForm.author}`);
-                    if (results[0]?.description) {
-                      btn.textContent = "Summarising…";
-                      const summary = await summariseDescription(results[0].description, editForm.title, editForm.author);
-                      setEditForm(f=>({...f, description: summary}));
-                    } else {
-                      alert("No description found — try editing the title/author first.");
-                    }
-                    btn.textContent = "🔍 Fetch & summarise from Google Books";
-                    btn.disabled = false;
-                  }}
-                >🔍 Fetch & summarise from Google Books</button>
-              </div>
             </div>
             <div className="factions">
               <button className="bprimary" onClick={saveEdit}>Save</button>
               <button className="bcancel" onClick={()=>setEditModal(null)}>Cancel</button>
-              <button className="delbtn" style={{marginLeft:"auto"}} onClick={()=>{setEditModal(null);deleteBook(editModal.id);}}>Delete book</button>
             </div>
           </div>
         </div>
@@ -1373,47 +1012,28 @@ IMPORTANT: memberMatch must ONLY include members who appear in the personal read
         <div className="overlay" onClick={()=>setEditPersonalModal(null)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
             <h3>Edit Book</h3>
-            <p>Editing your personal entry for this book</p>
+            <p>Editing your personal entry</p>
             <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:14}}>
-              <div className="fgrp"><label>Title</label><input value={editPersonalModal.title||""} onChange={e=>setEditPersonalModal(m=>({...m,title:e.target.value}))}/></div>
-              <div className="fgrp"><label>Author</label><input value={editPersonalModal.author||""} onChange={e=>setEditPersonalModal(m=>({...m,author:e.target.value}))}/></div>
+              <div className="fgrp"><label>Title</label><input defaultValue={editPersonalModal.title||""} id="pedit-title"/></div>
+              <div className="fgrp"><label>Author</label><input defaultValue={editPersonalModal.author||""} id="pedit-author"/></div>
               <div className="fgrp"><label>Genre</label>
-                <select value={editPersonalModal.genre||"Fiction"} onChange={e=>setEditPersonalModal(m=>({...m,genre:e.target.value}))}>
+                <select defaultValue={editPersonalModal.genre||"Fiction"} id="pedit-genre">
                   {GENRES.map(g=><option key={g}>{g}</option>)}
                 </select>
               </div>
-              <div className="fgrp">
-                <label>Blurb / Description</label>
-                <textarea value={editPersonalModal.description||""} onChange={e=>setEditPersonalModal(m=>({...m,description:e.target.value}))} placeholder="A short description of the book…" style={{minHeight:80,resize:"vertical",padding:"8px 10px",border:"1px solid var(--border)",borderRadius:5,fontFamily:"var(--B)",fontSize:13,outline:"none",width:"100%"}}/>
-                <button type="button" className="cover-upload-btn" style={{marginTop:5}}
-                  onClick={async(e)=>{
-                    const btn = e.currentTarget;
-                    btn.textContent = "Fetching…"; btn.disabled = true;
-                    const results = await searchGoogleBooks(`${editPersonalModal.title} ${editPersonalModal.author}`);
-                    if (results[0]?.description) {
-                      btn.textContent = "Summarising…";
-                      const summary = await summariseDescription(results[0].description, editPersonalModal.title, editPersonalModal.author);
-                      setEditPersonalModal(m=>({...m, description: summary}));
-                    } else { alert("No description found — try editing the title/author first."); }
-                    btn.textContent = "🔍 Fetch & summarise from Google Books"; btn.disabled = false;
-                  }}
-                >🔍 Fetch & summarise from Google Books</button>
-              </div>
               <div>
                 <div className="rlbl">Your Rating</div>
-                <StarRating value={fromStoredRating(editPersonalModal.rating)||7} onChange={v=>setEditPersonalModal(m=>({...m,rating:toStoredRating(v)}))}/>
+                <StarRating value={editPersonalModal.rating||7} onChange={v=>setEditPersonalModal(m=>({...m,rating:v}))}/>
               </div>
             </div>
             <div className="factions">
               <button className="bprimary" onClick={()=>savePersonalEdit(editPersonalModal.id,{
-                title: editPersonalModal.title,
-                author: editPersonalModal.author,
-                genre: editPersonalModal.genre,
-                description: editPersonalModal.description,
+                title: document.getElementById("pedit-title").value,
+                author: document.getElementById("pedit-author").value,
+                genre: document.getElementById("pedit-genre").value,
                 rating: editPersonalModal.rating,
               })}>Save</button>
               <button className="bcancel" onClick={()=>setEditPersonalModal(null)}>Cancel</button>
-              <button className="delbtn" style={{marginLeft:"auto"}} onClick={()=>{setEditPersonalModal(null);deletePersonalBook(editPersonalModal.id);}}>Delete</button>
             </div>
           </div>
         </div>
@@ -1430,42 +1050,6 @@ IMPORTANT: memberMatch must ONLY include members who appear in the personal read
             <div className="factions" style={{marginTop:14}}>
               <button className="bprimary" onClick={()=>savePersonalComment(commentPersonalModal.id)}>Save</button>
               <button className="bcancel" onClick={()=>setCommentPersonalModal(null)}>Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Suggestion edit modal */}
-      {editSuggModal&&(
-        <div className="overlay" onClick={()=>setEditSuggModal(null)}>
-          <div className="modal" onClick={e=>e.stopPropagation()}>
-            <h3>Edit Suggestion</h3>
-            <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:14}}>
-              <div className="fgrp"><label>Title</label><input value={editSuggForm.title||""} onChange={e=>setEditSuggForm(f=>({...f,title:e.target.value}))}/></div>
-              <div className="fgrp"><label>Author</label><input value={editSuggForm.author||""} onChange={e=>setEditSuggForm(f=>({...f,author:e.target.value}))}/></div>
-              <div className="fgrp"><label>Genre</label><select value={editSuggForm.genre||"Fiction"} onChange={e=>setEditSuggForm(f=>({...f,genre:e.target.value}))}>{GENRES.map(g=><option key={g}>{g}</option>)}</select></div>
-              <div className="fgrp">
-                <label>Blurb / Description</label>
-                <textarea value={editSuggForm.description||""} onChange={e=>setEditSuggForm(f=>({...f,description:e.target.value}))} placeholder="A short description of the book…" style={{minHeight:80,resize:"vertical",padding:"8px 10px",border:"1px solid var(--border)",borderRadius:5,fontFamily:"var(--B)",fontSize:13,outline:"none",width:"100%"}}/>
-                <button type="button" className="cover-upload-btn" style={{marginTop:5}}
-                  onClick={async(e)=>{
-                    const btn = e.currentTarget;
-                    btn.textContent = "Fetching…"; btn.disabled = true;
-                    const results = await searchGoogleBooks(`${editSuggForm.title} ${editSuggForm.author}`);
-                    if (results[0]?.description) {
-                      btn.textContent = "Summarising…";
-                      const summary = await summariseDescription(results[0].description, editSuggForm.title, editSuggForm.author);
-                      setEditSuggForm(f=>({...f, description: summary}));
-                    } else { alert("No description found — try editing the title/author first."); }
-                    btn.textContent = "🔍 Fetch & summarise from Google Books"; btn.disabled = false;
-                  }}
-                >🔍 Fetch & summarise from Google Books</button>
-              </div>
-            </div>
-            <div className="factions">
-              <button className="bprimary" onClick={saveSuggEdit}>Save</button>
-              <button className="bcancel" onClick={()=>setEditSuggModal(null)}>Cancel</button>
-              <button className="delbtn" style={{marginLeft:"auto"}} onClick={()=>{setEditSuggModal(null);deleteSuggestion(editSuggModal.id);}}>Delete</button>
             </div>
           </div>
         </div>
