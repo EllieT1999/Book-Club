@@ -6,7 +6,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_wGS2qw38rGLjPI1daKMwDg_c2JflEu3";
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const GENRES = ["Literary Fiction","Fiction","Memoir","Non-Fiction","Mystery","Sci-Fi","Fantasy","Historical Fiction","Romance","Thriller","Biography","Self-Help","Crime","Short Stories","Poetry"];
-const MEMBERS = ["Ali","Bec","Cassie","Chloe","Chloe VN","Ellie","Emma","Erin","Evie","Gabby","Georgie","Hannah","Harriet","Izzy","Jorgia","Lara","Lillay","Maddie","Molly","Pip","Rachel","Ruby","Sanyogita","Soph","Tash"];
+const MEMBERS = ["Ali","Bec","Cassie","Chloe","Ellie","Emma","Evie","Georgie","Hannah","Harriet","Izzy","Lara","Lillay","Maddie","Pip","Rachel","Sanyogita","Soph","Tash"];
 const ADMIN = "Ellie";
 
 // books.ratings stores plain numbers (integers, no x2 encoding)
@@ -538,12 +538,13 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
   "author": "string",
   "genre": "string",
   "fromSuggestions": false,
-  "blurb": "2-3 sentence enticing description of what the book is about and why it's a compelling read",
-  "whyThisBook": "2 sentences on why this fits the group's collective taste",
-  "memberMatch": [{"name": "MemberName", "reason": "one short sentence why this member will love it"}],
-  "tasteOverlap": "one sentence describing the shared taste pattern this pick targets",
+  "blurb": "2 sentences max",
+  "whyThisBook": "1 sentence",
+  "memberMatch": [{"name": "MemberName", "reason": "5 words max"}],
+  "tasteOverlap": "half sentence",
   "matchScore": 85
-}]`;
+}]
+IMPORTANT: memberMatch must ONLY include members who appear in the personal reading data above. Skip anyone not listed.`;
 
     let promptBody;
     try {
