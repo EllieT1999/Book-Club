@@ -509,32 +509,34 @@ export default function BookClub() {
       ? suggestions.map(s => `"${s.title}" by ${s.author} (${s.genre}) — suggested by ${s.suggested_by}${s.reason ? `, reason: ${s.reason}` : ""}, ${s.votes?.length||0} vote(s)`).join("\n")
       : "None";
 
-    const prompt = `You are an expert literary analyst and book recommender for a women's book club with ${MEMBERS.length} members.
+    const prompt = `You are an expert literary analyst and book recommender for a women's book club with ${MEMBERS.length} members. You have deep knowledge of literary fiction, prize lists (Women's Prize, Booker, Pulitzer, Bailey's, etc.), book club favourites, and contemporary fiction published up to 2025.
 
-STEP 1 — DEEP TASTE ANALYSIS
-Carefully analyse each member's personal reading list below. For each member identify:
-- Favourite genres, themes, and emotional tones
-- Writing style preferences (literary vs plot-driven, slow-burn vs fast-paced, dark vs uplifting)
-- Recurring subject matter (family dynamics, identity, female friendship, social issues, grief, love, etc.)
+STEP 1 — ANALYSE EACH MEMBER'S TASTE
+Study each member's personal reading list carefully. For each member, identify:
+- Their preferred genres and themes
+- Writing style preferences (literary vs commercial, character-driven vs plot-driven, dark vs uplifting)
+- Recurring subjects they're drawn to (family, identity, female friendship, grief, love, social issues, etc.)
+- The emotional experience they seem to seek from books
 
-MEMBERS' PERSONAL READING LISTS (books rated 7+/10 — genuinely loved):
-${memberTastes || "No personal books rated 7+ yet — infer taste from suggestions and recommend broadly acclaimed women's fiction."}
+MEMBERS' PERSONAL READING LISTS (books rated 7+/10 — books they genuinely loved):
+${memberTastes || "No personal books rated 7+ yet — use suggestions and general taste inference instead."}
 
-STEP 2 — FIND TASTE CROSSOVER
-Identify across all members:
-- Themes and genres that multiple members gravitate toward
-- Emotional tones appearing repeatedly across different members' lists
+STEP 2 — IDENTIFY TASTE CROSSOVER
+Look across all members and find:
+- Themes, genres, and tones that 3+ members gravitate toward
 - Shared sensibilities even where members haven't read the same books
+- The "sweet spot" — what would satisfy the broadest coalition of the group
 
-STEP 3 — RESEARCH BROADLY USING WEB SEARCH
-Use web search to find highly acclaimed books matching this group's taste crossover. Actively search for:
-- Recent prize-winners and shortlisted books (Women's Prize for Fiction, Booker Prize, Pulitzer, etc.) from the last 5 years
-- Critically acclaimed debuts and second novels matching the group's themes
-- Books that appear on "if you loved X, read Y" recommendation lists for authors the members enjoy
-- Book club favourites with strong reader communities
-Go beyond your training data. The goal is fresh, well-researched recommendations the group won't have obviously encountered.
+STEP 3 — DRAW ON YOUR DEEP BOOK KNOWLEDGE
+Using your training knowledge of literary fiction, prize lists, and book club reads up to 2025:
+- Think about recent Women's Prize winners and longlists (2020–2025)
+- Think about Booker Prize winners and shortlists that appeal to general readers
+- Think about books that appear repeatedly on "best book club reads" lists
+- Think about "if you loved X, you'll love Y" read-alike recommendations for authors the members enjoy
+- Consider acclaimed debuts and second novels that match the group's taste profile
+- Don't just default to the most famous titles — think about hidden gems and slightly less obvious picks that would genuinely delight this specific group
 
-MEMBER SUGGESTIONS (strong secondary signal — take these seriously, especially highly voted ones):
+MEMBER SUGGESTIONS (strong secondary signal — consider these seriously, especially highly voted ones):
 ${suggSummary}
 
 ALREADY READ AS A GROUP — do NOT recommend these:
@@ -544,7 +546,7 @@ BOOKS ALREADY READ BY MULTIPLE MEMBERS — do NOT recommend these:
 ${multiPersonalBooks.length ? multiPersonalBooks.join(", ") : "None"}
 
 STEP 4 — RANK AND RETURN
-Return exactly 10 books ranked by how well they fit the collective group taste. Mix suggestions with your own researched picks — the best 10 regardless of source.
+Return exactly 10 books ranked by fit with the collective group taste. Mix suggestions with your own picks — the best 10 regardless of source. Aim for variety in genre and tone across the list.
 
 Respond ONLY with a valid JSON array, no markdown, no extra text:
 [{
@@ -553,8 +555,8 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
   "author": "string",
   "genre": "string",
   "fromSuggestions": false,
-  "blurb": "2 sentences max",
-  "whyThisBook": "1 sentence",
+  "blurb": "2 sentences on what the book is about",
+  "whyThisBook": "1 sentence on why it fits this group's taste",
   "memberMatch": [{"name": "MemberName", "reason": "5 words max"}],
   "tasteOverlap": "half sentence",
   "matchScore": 85
@@ -563,12 +565,7 @@ IMPORTANT: memberMatch must ONLY include members who appear in the personal read
 
     let promptBody;
     try {
-      promptBody = JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 8000,
-        tools: [{ type: "web_search_20250305", name: "web_search" }],
-        messages: [{ role: "user", content: prompt }]
-      });
+      promptBody = JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:6000, messages:[{ role:"user", content:prompt }] });
     } catch(e) {
       setAiRecs([{ error: true, msg: `Failed to build request — bad character in your data: ${e.message}` }]);
       setAiLoading(false);
@@ -605,8 +602,7 @@ IMPORTANT: memberMatch must ONLY include members who appear in the personal read
         return;
       }
 
-      // Filter for text blocks only — web search adds tool_use/tool_result blocks
-      const text = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("");
+      const text = data.content?.find(b => b.type==="text")?.text || "";
       if (!text) {
         setAiRecs([{ error: true, msg: `No text in response. Keys: ${Object.keys(data).join(", ")}` }]);
         setAiLoading(false);
