@@ -509,27 +509,42 @@ export default function BookClub() {
       ? suggestions.map(s => `"${s.title}" by ${s.author} (${s.genre}) — suggested by ${s.suggested_by}${s.reason ? `, reason: ${s.reason}` : ""}, ${s.votes?.length||0} vote(s)`).join("\n")
       : "None";
 
-    const prompt = `You are an expert book recommendation engine for a women's book club with ${MEMBERS.length} members.
+    const prompt = `You are an expert literary analyst and book recommender for a women's book club with ${MEMBERS.length} members.
 
-YOUR PRIMARY DATA SOURCE — Members' personal reading lists (books they've personally read and rated 7 or higher out of 10, meaning they genuinely loved them):
-${memberTastes || "No personal books rated 7+ yet — use suggestions and general taste inference instead."}
+STEP 1 — DEEP TASTE ANALYSIS
+Carefully analyse each member's personal reading list below. For each member identify:
+- Favourite genres, themes, and emotional tones
+- Writing style preferences (literary vs plot-driven, slow-burn vs fast-paced, dark vs uplifting)
+- Recurring subject matter (family dynamics, identity, female friendship, social issues, grief, love, etc.)
 
-SECONDARY SIGNAL — Books members have suggested for the club:
+MEMBERS' PERSONAL READING LISTS (books rated 7+/10 — genuinely loved):
+${memberTastes || "No personal books rated 7+ yet — infer taste from suggestions and recommend broadly acclaimed women's fiction."}
+
+STEP 2 — FIND TASTE CROSSOVER
+Identify across all members:
+- Themes and genres that multiple members gravitate toward
+- Emotional tones appearing repeatedly across different members' lists
+- Shared sensibilities even where members haven't read the same books
+
+STEP 3 — RESEARCH BROADLY USING WEB SEARCH
+Use web search to find highly acclaimed books matching this group's taste crossover. Actively search for:
+- Recent prize-winners and shortlisted books (Women's Prize for Fiction, Booker Prize, Pulitzer, etc.) from the last 5 years
+- Critically acclaimed debuts and second novels matching the group's themes
+- Books that appear on "if you loved X, read Y" recommendation lists for authors the members enjoy
+- Book club favourites with strong reader communities
+Go beyond your training data. The goal is fresh, well-researched recommendations the group won't have obviously encountered.
+
+MEMBER SUGGESTIONS (strong secondary signal — take these seriously, especially highly voted ones):
 ${suggSummary}
 
-ALREADY READ AS A GROUP (do NOT recommend these):
+ALREADY READ AS A GROUP — do NOT recommend these:
 ${alreadyRead || "None yet"}
 
-BOOKS ALREADY READ BY MULTIPLE MEMBERS (do NOT recommend these — they've already read them individually):
+BOOKS ALREADY READ BY MULTIPLE MEMBERS — do NOT recommend these:
 ${multiPersonalBooks.length ? multiPersonalBooks.join(", ") : "None"}
 
-YOUR TASK:
-Analyse the crossover in taste between members. Look for:
-- Genres, themes, writing styles, and authors that multiple members love
-- Hidden connections between what different members enjoy
-- Books that would genuinely satisfy the most members based on their proven reading tastes
-
-Return a ranked list of exactly 10 books the whole group should read next. For each, explain specifically WHICH members' taste it matches and why, based on their personal reading history.
+STEP 4 — RANK AND RETURN
+Return exactly 10 books ranked by how well they fit the collective group taste. Mix suggestions with your own researched picks — the best 10 regardless of source.
 
 Respond ONLY with a valid JSON array, no markdown, no extra text:
 [{
@@ -544,11 +559,16 @@ Respond ONLY with a valid JSON array, no markdown, no extra text:
   "tasteOverlap": "half sentence",
   "matchScore": 85
 }]
-IMPORTANT: memberMatch must ONLY include members who appear in the personal reading data above. Skip anyone not listed.`;
+IMPORTANT: memberMatch must ONLY include members who appear in the personal reading data above. Skip anyone not listed. Keep reasons to 5 words max.`;
 
     let promptBody;
     try {
-      promptBody = JSON.stringify({ model:"claude-haiku-4-5-20251001", max_tokens:4000, messages:[{ role:"user", content:prompt }] });
+      promptBody = JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 8000,
+        tools: [{ type: "web_search_20250305", name: "web_search" }],
+        messages: [{ role: "user", content: prompt }]
+      });
     } catch(e) {
       setAiRecs([{ error: true, msg: `Failed to build request — bad character in your data: ${e.message}` }]);
       setAiLoading(false);
@@ -585,7 +605,8 @@ IMPORTANT: memberMatch must ONLY include members who appear in the personal read
         return;
       }
 
-      const text = data.content?.find(b => b.type==="text")?.text || "";
+      // Filter for text blocks only — web search adds tool_use/tool_result blocks
+      const text = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("");
       if (!text) {
         setAiRecs([{ error: true, msg: `No text in response. Keys: ${Object.keys(data).join(", ")}` }]);
         setAiLoading(false);
