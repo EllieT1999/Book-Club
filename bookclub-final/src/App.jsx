@@ -349,16 +349,15 @@ export default function BookClub() {
     setLoading(false);
   }, []);
 
-  useEffect(() => {
-    fetchAll();
-    const interval = setInterval(fetchAll, 3000);
-    const subs = [
-      supabase.channel("bc").on("postgres_changes", { event:"*", schema:"public", table:"books" }, fetchAll).subscribe(),
-      supabase.channel("sg").on("postgres_changes", { event:"*", schema:"public", table:"suggestions" }, fetchAll).subscribe(),
-      supabase.channel("pb").on("postgres_changes", { event:"*", schema:"public", table:"personal_books" }, fetchAll).subscribe(),
-    ];
-    return () => { clearInterval(interval); subs.forEach(s => s.unsubscribe()); };
-  }, [fetchAll]);
+useEffect(() => {
+  fetchAll();
+  const subs = [
+    supabase.channel("bc").on("postgres_changes", { event:"*", schema:"public", table:"books" }, fetchAll).subscribe(),
+    supabase.channel("sg").on("postgres_changes", { event:"*", schema:"public", table:"suggestions" }, fetchAll).subscribe(),
+    supabase.channel("pb").on("postgres_changes", { event:"*", schema:"public", table:"personal_books" }, fetchAll).subscribe(),
+  ];
+  return () => { subs.forEach(s => s.unsubscribe()); };
+}, [fetchAll]);
 
   async function addBook() {
     if (!newBook.title.trim() || !newBook.author.trim()) return;
